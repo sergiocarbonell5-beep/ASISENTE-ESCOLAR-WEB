@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-SISTEMA INTEGRAL EDUCATIVO — CONEXIÓN NUBE SUPABASE (MULTI-DOCENTE)
-===================================================================
-Base de datos persistente en Supabase (nada se borra al reiniciar).
-Gestión de Login / Registro de Profesores con aislamiento de datos.
+SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA (SUPABASE NUBE COMPLETO)
+=====================================================================
+Todas las funcionalidades integradas: Documentos, Asistencia, Calificaciones, 
+Convivencia, Tabla de Líderes y Gestión Completa (Editar/Eliminar Cursos y Alumnos).
 """
 
 import os
@@ -43,7 +43,7 @@ MENSAJES_ANIMO = [
 ]
 
 MATERIAS_LISTA = [
-    "Matemáticas", "Español", "Inglés", "Sociales", 
+    "Inglés", "Matemáticas", "Español", "Sociales", 
     "Naturales", "Artística", "Ética", "Religión", "Informática"
 ]
 
@@ -58,12 +58,11 @@ def init_supabase() -> Client:
 
 supabase = init_supabase()
 
-# Variables de estado
 if "profesor" not in st.session_state:
     st.session_state.profesor = None
 
 # ================================================================
-# FUNCIONES DE AUTENTICACIÓN
+# AUTENTICACIÓN
 # ================================================================
 def registrar_profesor(nombre, email, password):
     email_clean = email.strip().lower()
@@ -71,11 +70,7 @@ def registrar_profesor(nombre, email, password):
     if res.data:
         return False, "El correo electrónico ya está registrado."
     
-    data = {
-        "nombre": nombre.strip(),
-        "email": email_clean,
-        "password": password.strip()
-    }
+    data = {"nombre": nombre.strip(), "email": email_clean, "password": password.strip()}
     supabase.table("profesores").insert(data).execute()
     return True, "¡Profesor registrado exitosamente! Ya puedes iniciar sesión."
 
@@ -87,7 +82,7 @@ def login_profesor(email, password):
     return None
 
 # ================================================================
-# CONSULTAS NUBE DE DATOS (FILTRADAS POR PROFESOR)
+# CONSULTAS A LA NUBE (FILTRADAS POR PROFESOR)
 # ================================================================
 def obtener_grados(profesor_id):
     res = supabase.table("grados").select("*").eq("profesor_id", profesor_id).order("nombre").execute()
@@ -96,20 +91,27 @@ def obtener_grados(profesor_id):
 def agregar_grado(nombre, profesor_id):
     supabase.table("grados").insert({"nombre": nombre, "profesor_id": profesor_id}).execute()
 
-def obtener_estudiantes_por_grado(grado_id, profesor_id):
+def editar_grado(grado_id, nuevo_nombre):
+    supabase.table("grados").update({"nombre": nuevo_nombre}).eq("id", grado_id).execute()
+
+def eliminar_grado(grado_id):
+    supabase.table("grados").delete().eq("id", grado_id).execute()
+
+def obtener_estudiantes(grado_id, profesor_id):
     res = supabase.table("estudiantes").select("*").eq("grado_id", grado_id).eq("profesor_id", profesor_id).eq("activo", 1).order("nombre").execute()
     return res.data
 
 def agregar_estudiante(nombre, grado_id, profesor_id):
-    data = {
-        "nombre": nombre,
-        "grado_id": grado_id,
-        "profesor_id": profesor_id,
-        "puntos": 0,
-        "racha": 0,
-        "activo": 1
-    }
-    supabase.table("estudiantes").insert(data).execute()
+    supabase.table("estudiantes").insert({
+        "nombre": nombre, "grado_id": grado_id, "profesor_id": profesor_id,
+        "puntos": 0, "racha": 0, "activo": 1
+    }).execute()
+
+def editar_estudiante(estudiante_id, nuevo_nombre):
+    supabase.table("estudiantes").update({"nombre": nuevo_nombre}).eq("id", estudiante_id).execute()
+
+def eliminar_estudiante(estudiante_id):
+    supabase.table("estudiantes").update({"activo": 0}).eq("id", estudiante_id).execute()
 
 def ya_registrado_hoy(estudiante_id, fecha):
     res = supabase.table("registros").select("id").eq("estudiante_id", estudiante_id).eq("fecha", fecha).execute()
@@ -122,53 +124,39 @@ def registrar_asistencia(estudiante, grado_id, profesor_id):
     if ya_registrado_hoy(estudiante["id"], hoy):
         return None
 
-    # Contar cuántos han llegado hoy en este grado
     res_hoy = supabase.table("registros").select("id").eq("fecha", hoy).eq("grado_id", grado_id).execute()
     orden = len(res_hoy.data) + 1
     
     puntos_extra = PUNTOS_EXTRA_PUNTUALIDAD if orden <= CUPOS_PUNTUALIDAD else 0
     puntos_totales = PUNTOS_BASE + puntos_extra
     
-    # Calcular racha
     ayer = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
     nueva_racha = estudiante["racha"] + 1 if estudiante["ultima_fecha"] == ayer else 1
     nuevos_puntos = estudiante["puntos"] + puntos_totales
     
-    # Actualizar Estudiante
     supabase.table("estudiantes").update({
-        "puntos": nuevos_puntos,
-        "racha": nueva_racha,
-        "ultima_fecha": hoy,
+        "puntos": nuevos_puntos, "racha": nueva_racha, "ultima_fecha": hoy,
         "total_asistencias": estudiante.get("total_asistencias", 0) + 1
     }).eq("id", estudiante["id"]).execute()
 
-    # Insertar Registro
     supabase.table("registros").insert({
-        "estudiante_id": estudiante["id"],
-        "fecha": hoy,
-        "hora": hora_str,
-        "puntos_obtenidos": puntos_totales,
-        "orden_llegada": orden,
-        "grado_id": grado_id,
-        "profesor_id": profesor_id
+        "estudiante_id": estudiante["id"], "fecha": hoy, "hora": hora_str,
+        "puntos_obtenidos": puntos_totales, "orden_llegada": orden,
+        "grado_id": grado_id, "profesor_id": profesor_id
     }).execute()
 
     return {
-        "nombre": estudiante["nombre"],
-        "puntos_ganados": puntos_totales,
-        "puntos_extra": puntos_extra,
-        "puntos_totales": nuevos_puntos,
-        "racha": nueva_racha
+        "nombre": estudiante["nombre"], "puntos_ganados": puntos_totales,
+        "puntos_extra": puntos_extra, "puntos_totales": nuevos_puntos, "racha": nueva_racha
     }
 
 # ================================================================
-# MODAL VENTANA CELEBRACIÓN CON VOZ
+# VENTANA CELEBRACIÓN CON VOZ
 # ================================================================
 @st.dialog("🎉 ¡Asistencia Registrada!", width="large")
 def ventana_celebracion(res):
     nombre = res["nombre"]
     puntos_ganados = res["puntos_ganados"]
-    puntos_extra = res["puntos_extra"]
     puntos_totales = res["puntos_totales"]
     racha = res["racha"]
     
@@ -204,7 +192,7 @@ def ventana_celebracion(res):
         st.rerun()
 
 # ================================================================
-# INTERFAZ DE LOGIN / REGISTRO
+# VISTA: LOGIN / REGISTRO
 # ================================================================
 if st.session_state.profesor is None:
     st.title("🏫 " + NOMBRE_ESCUELA)
@@ -217,7 +205,6 @@ if st.session_state.profesor is None:
             email = st.text_input("Correo electrónico:")
             password = st.text_input("Contraseña:", type="password")
             btn_login = st.form_submit_button("Ingresar al Panel")
-            
             if btn_login:
                 prof = login_profesor(email, password)
                 if prof:
@@ -233,7 +220,6 @@ if st.session_state.profesor is None:
             email_reg = st.text_input("Correo electrónico:")
             pass_reg = st.text_input("Crear Contraseña:", type="password")
             btn_reg = st.form_submit_button("Crear Cuenta de Docente")
-            
             if btn_reg:
                 if nom_reg and email_reg and pass_reg:
                     ok, msg = registrar_profesor(nom_reg, email_reg, pass_reg)
@@ -245,7 +231,7 @@ if st.session_state.profesor is None:
                     st.warning("Completa todos los campos.")
 
 # ================================================================
-# PANEL PRINCIPAL DEL PROFESOR
+# VISTA: PANEL PRINCIPAL
 # ================================================================
 else:
     prof = st.session_state.profesor
@@ -267,40 +253,125 @@ else:
             grado_sel_nombre = ""
         else:
             nombres_grados = [g["nombre"] for g in grados]
-            grado_sel_nombre = st.selectbox("Selecciona tu Grado:", nombres_grados)
+            grado_sel_nombre = st.selectbox("Selecciona un Grado:", nombres_grados)
             grado_sel_id = next(g["id"] for g in grados if g["nombre"] == grado_sel_nombre)
-            
+
         st.markdown("---")
-        with st.expander("➕ Crear Nuevo Curso"):
-            nuevo_grado_txt = st.text_input("Nombre del Curso:", placeholder="Ej. Grado Cuarto")
-            if st.button("Guardar Curso", use_container_width=True):
+        
+        # GESTIÓN DE CURSOS Y ESTUDIANTES
+        with st.expander("⚙️ Gestionar Cursos / Grados"):
+            nuevo_grado_txt = st.text_input("Nombre de nuevo curso:", placeholder="Ej. Grado Cuarto")
+            if st.button("➕ Crear Curso", use_container_width=True):
                 if nuevo_grado_txt.strip():
                     agregar_grado(nuevo_grado_txt.strip(), prof["id"])
-                    st.success("¡Curso creado!")
+                    st.success("Curso creado.")
+                    st.rerun()
+            
+            if grado_sel_id:
+                st.markdown("---")
+                edit_g_nom = st.text_input("Editar nombre del curso actual:", value=grado_sel_nombre)
+                if st.button("✏️ Guardar Nombre Curso", use_container_width=True):
+                    editar_grado(grado_sel_id, edit_g_nom.strip())
+                    st.success("Nombre actualizado.")
+                    st.rerun()
+                    
+                if st.button("🗑️ Eliminar Curso Actual", type="primary", use_container_width=True):
+                    eliminar_grado(grado_sel_id)
+                    st.success("Curso eliminado.")
                     st.rerun()
 
         st.markdown("---")
-        st.subheader("➕ Agregar Estudiante")
-        nom_est = st.text_input("Nombre de alumno:")
-        if st.button("Guardar Alumno", use_container_width=True):
-            if nom_est.strip() and grado_sel_id:
-                agregar_estudiante(nom_est.strip(), grado_sel_id, prof["id"])
-                st.success("Alumno guardado.")
-                st.rerun()
+        with st.expander("👤 Agregar / Editar Estudiante"):
+            if grado_sel_id:
+                nom_est = st.text_input("Nombre completo de alumno:")
+                if st.button("➕ Guardar Alumno", use_container_width=True):
+                    if nom_est.strip():
+                        agregar_estudiante(nom_est.strip(), grado_sel_id, prof["id"])
+                        st.success("Alumno guardado.")
+                        st.rerun()
+                
+                st.markdown("---")
+                estudiantes_lista = obtener_estudiantes(grado_sel_id, prof["id"])
+                if estudiantes_lista:
+                    dict_est = {e["nombre"]: e for e in estudiantes_lista}
+                    est_edit_nom = st.selectbox("Selecciona alumno a editar:", list(dict_est.keys()))
+                    est_obj = dict_est[est_edit_nom]
+                    
+                    nuevo_nom_val = st.text_input("Nuevo nombre:", value=est_obj["nombre"])
+                    col_e1, col_e2 = st.columns(2)
+                    with col_e1:
+                        if st.button("✏️ Actualizar", use_container_width=True):
+                            editar_estudiante(est_obj["id"], nuevo_nom_val.strip())
+                            st.success("Nombre actualizado.")
+                            st.rerun()
+                    with col_e2:
+                        if st.button("🗑️ Eliminar", use_container_width=True):
+                            eliminar_estudiante(est_obj["id"])
+                            st.success("Alumno eliminado.")
+                            st.rerun()
 
-    # VISTA DE PESTAÑAS
-    st.title(f"📋 Panel Educativo — {grado_sel_nombre if grado_sel_nombre else 'Selecciona o crea un curso'}")
+    # PESTAÑAS PRINCIPALES DEL SISTEMA
+    st.title(f"📋 Asistente Educativo — {grado_sel_nombre if grado_sel_nombre else 'Crea un curso'}")
 
     if grado_sel_id:
-        p1, p2 = st.tabs(["📋 Registro de Asistencia", "🏆 Tabla de Posiciones"])
-        
-        with p1:
-            st.subheader("Selecciona un estudiante para marcar asistencia hoy")
-            estudiantes = obtener_estudiantes_por_grado(grado_sel_id, prof["id"])
+        t_docs, t_asistencia, t_notas, t_convivencia, t_lideres = st.tabs([
+            "📄 Documentos Institucionales",
+            "📋 Registro de Asistencia", 
+            "📝 Calificaciones",
+            "⚖️ Convivencia",
+            "🏆 Tabla de Líderes"
+        ])
+
+        # -------------------------------------------------------------
+        # 1. DOCUMENTOS INSTITUCIONALES
+        # -------------------------------------------------------------
+        with t_docs:
+            st.subheader("📁 Repositorio de Documentos por Materia")
+            tipo_doc_sel = st.radio("Categoría:", ["Planes de Área", "Planes de Clase", "Guías Educativas"], horizontal=True)
+            materia_doc = st.selectbox("Materia:", MATERIAS_LISTA)
+            
+            archivo_subido = st.file_uploader(f"Subir documento a {tipo_doc_sel} ({materia_doc}):", type=["pdf", "docx", "pptx", "xlsx", "txt"])
+            if archivo_subido is not None:
+                if st.button("💾 Guardar Documento en la Nube"):
+                    bytes_data = archivo_subido.getvalue()
+                    b64_str = base64.b64encode(bytes_data).decode('utf-8')
+                    
+                    supabase.table("documentos").insert({
+                        "nombre": archivo_subido.name,
+                        "materia": materia_doc,
+                        "tipo_doc": tipo_doc_sel,
+                        "contenido_b64": b64_str,
+                        "grado_id": grado_sel_id,
+                        "profesor_id": prof["id"]
+                    }).execute()
+                    st.success("¡Documento guardado permanentemente en la nube!")
+                    st.rerun()
+
+            st.markdown("---")
+            st.write(f"**Documentos de {materia_doc} en {tipo_doc_sel}:**")
+            res_docs = supabase.table("documentos").select("*").eq("materia", materia_doc).eq("tipo_doc", tipo_doc_sel).eq("grado_id", grado_sel_id).eq("profesor_id", prof["id"]).execute()
+            
+            if not res_docs.data:
+                st.info(f"Aún no se han subido documentos para {materia_doc}.")
+            else:
+                for doc in res_docs.data:
+                    c1, c2 = st.columns([3, 1])
+                    with c1:
+                        st.write(f"📄 **{doc['nombre']}** ({doc['created_at'][:10]})")
+                    with c2:
+                        bytes_dec = base64.b64decode(doc['contenido_b64'])
+                        st.download_button("⬇️ Descargar", data=bytes_dec, file_name=doc['nombre'], use_container_width=True)
+
+        # -------------------------------------------------------------
+        # 2. REGISTRO DE ASISTENCIA
+        # -------------------------------------------------------------
+        with t_asistencia:
+            st.subheader("Marcar Asistencia Diaria")
+            estudiantes = obtener_estudiantes(grado_sel_id, prof["id"])
             hoy_str = datetime.date.today().isoformat()
             
             if not estudiantes:
-                st.info("No hay alumnos en este curso. Agrégalos en la barra lateral.")
+                st.info("No hay alumnos registrados en este curso. Agrégalos desde la barra lateral.")
             else:
                 cols = st.columns(3)
                 for i, est in enumerate(estudiantes):
@@ -321,12 +392,95 @@ else:
                                         st.balloons()
                                         ventana_celebracion(res)
 
-        with p2:
-            st.subheader("🏆 Clasificación de Puntos y Rachas")
-            estudiantes = obtener_estudiantes_por_grado(grado_sel_id, prof["id"])
+        # -------------------------------------------------------------
+        # 3. CALIFICACIONES
+        # -------------------------------------------------------------
+        with t_notas:
+            st.subheader("📝 Registro de Calificaciones")
+            estudiantes = obtener_estudiantes(grado_sel_id, prof["id"])
+            
+            if estudiantes:
+                col_n1, col_n2, col_n3, col_n4 = st.columns(4)
+                with col_n1:
+                    dict_e = {e["nombre"]: e["id"] for e in estudiantes}
+                    est_nota_nom = st.selectbox("Estudiante:", list(dict_e.keys()))
+                with col_n2:
+                    mat_nota = st.selectbox("Materia de nota:", MATERIAS_LISTA)
+                with col_n3:
+                    val_nota = st.number_input("Nota (1.0 a 5.0):", min_value=1.0, max_value=5.0, value=5.0, step=0.1)
+                with col_n4:
+                    periodo_nota = st.selectbox("Periodo:", ["Periodo 1", "Periodo 2", "Periodo 3", "Periodo 4"])
+                
+                if st.button("💾 Guardar Calificación", use_container_width=True):
+                    supabase.table("calificaciones").insert({
+                        "estudiante_id": dict_e[est_nota_nom],
+                        "materia": mat_nota,
+                        "nota": val_nota,
+                        "periodo": periodo_nota,
+                        "profesor_id": prof["id"]
+                    }).execute()
+                    st.success("Nota guardada exitosamente.")
+                    st.rerun()
+
+                st.markdown("---")
+                st.write("**Historial de Notas Registradas:**")
+                res_notas = supabase.table("calificaciones").select("estudiante_id, materia, nota, periodo").eq("profesor_id", prof["id"]).execute()
+                if res_notas.data:
+                    id_to_name = {e["id"]: e["nombre"] for e in estudiantes}
+                    df_notas = pd.DataFrame([
+                        {"Estudiante": id_to_name.get(n["estudiante_id"], "N/A"), "Materia": n["materia"], "Nota": n["nota"], "Periodo": n["periodo"]}
+                        for n in res_notas.data if n["estudiante_id"] in id_to_name
+                    ])
+                    st.dataframe(df_notas, use_container_width=True)
+
+        # -------------------------------------------------------------
+        # 4. CONVIVENCIA
+        # -------------------------------------------------------------
+        with t_convivencia:
+            st.subheader("⚖️ Observador del Estudiante / Convivencia")
+            estudiantes = obtener_estudiantes(grado_sel_id, prof["id"])
+            
+            if estudiantes:
+                dict_e = {e["nombre"]: e["id"] for e in estudiantes}
+                c_c1, c_c2 = st.columns(2)
+                with c_c1:
+                    est_conv_nom = st.selectbox("Estudiante a registrar:", list(dict_e.keys()))
+                with c_c2:
+                    tipo_conv = st.selectbox("Tipo de anotación:", ["Positivo / Reconocimiento", "Llamado de atención", "Falta grave"])
+                
+                desc_conv = st.text_area("Descripción de la situación:")
+                if st.button("📝 Guardar Anotación", use_container_width=True):
+                    if desc_conv.strip():
+                        supabase.table("convivencia").insert({
+                            "estudiante_id": dict_e[est_conv_nom],
+                            "fecha": datetime.date.today().isoformat(),
+                            "tipo": tipo_conv,
+                            "descripcion": desc_conv.strip(),
+                            "profesor_id": prof["id"]
+                        }).execute()
+                        st.success("Anotación guardada en el observador.")
+                        st.rerun()
+
+                st.markdown("---")
+                res_conv = supabase.table("convivencia").select("*").eq("profesor_id", prof["id"]).execute()
+                if res_conv.data:
+                    id_to_name = {e["id"]: e["nombre"] for e in estudiantes}
+                    df_c = pd.DataFrame([
+                        {"Fecha": c["fecha"], "Estudiante": id_to_name.get(c["estudiante_id"], "N/A"), "Tipo": c["tipo"], "Anotación": c["descripcion"]}
+                        for c in res_conv.data if c["estudiante_id"] in id_to_name
+                    ])
+                    st.dataframe(df_c, use_container_width=True)
+
+        # -------------------------------------------------------------
+        # 5. TABLA DE LÍDERES
+        # -------------------------------------------------------------
+        with t_lideres:
+            st.subheader("🏆 Clasificación General por Puntos y Rachas")
+            estudiantes = obtener_estudiantes(grado_sel_id, prof["id"])
             if estudiantes:
                 df = pd.DataFrame([
-                    {"Estudiante": e["nombre"], "Puntos": e["puntos"], "Racha": f"🔥 {e['racha']} días"}
+                    {"Estudiante": e["nombre"], "Puntos Acumulados": e["puntos"], "Racha Actual": f"🔥 {e['racha']} días", "Asistencias Totales": e.get("total_asistencias", 0)}
                     for e in estudiantes
-                ]).sort_values(by="Puntos", ascending=False)
+                ]).sort_values(by="Puntos Acumulados", ascending=False)
+                
                 st.dataframe(df, use_container_width=True)
