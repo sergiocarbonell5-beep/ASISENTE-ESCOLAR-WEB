@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA (SUPABASE NUBE COMPLETO)
+SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA (SUPABASE NUBE COMPLETO Y OPTIMIZADO)
 =====================================================================
-Todas las funcionalidades integradas: Documentos, Asistencia, Calificaciones, 
-Convivencia, Tabla de Líderes y Gestión Completa (Editar/Eliminar Cursos y Alumnos).
+Todas las funcionalidades: Documentos, Asistencia Rápida, Calificaciones, 
+Convivencia, Tabla de Líderes y Gestión Completa de Cursos/Alumnos.
 """
 
 import os
@@ -62,7 +62,7 @@ if "profesor" not in st.session_state:
     st.session_state.profesor = None
 
 # ================================================================
-# AUTENTICACIÓN
+# AUTENTICACIÓN DE PROFESORES
 # ================================================================
 def registrar_profesor(nombre, email, password):
     email_clean = email.strip().lower()
@@ -82,7 +82,7 @@ def login_profesor(email, password):
     return None
 
 # ================================================================
-# CONSULTAS A LA NUBE (FILTRADAS POR PROFESOR)
+# CONSULTAS BASE DE DATOS NUBE
 # ================================================================
 def obtener_grados(profesor_id):
     res = supabase.table("grados").select("*").eq("profesor_id", profesor_id).order("nombre").execute()
@@ -117,6 +117,7 @@ def ya_registrado_hoy(estudiante_id, fecha):
     res = supabase.table("registros").select("id").eq("estudiante_id", estudiante_id).eq("fecha", fecha).execute()
     return len(res.data) > 0
 
+# REGISTRO DE ASISTENCIA RÁPIDO Y OPTIMIZADO
 def registrar_asistencia(estudiante, grado_id, profesor_id):
     hoy = datetime.date.today().isoformat()
     hora_str = datetime.datetime.now().strftime("%H:%M:%S")
@@ -124,8 +125,9 @@ def registrar_asistencia(estudiante, grado_id, profesor_id):
     if ya_registrado_hoy(estudiante["id"], hoy):
         return None
 
-    res_hoy = supabase.table("registros").select("id").eq("fecha", hoy).eq("grado_id", grado_id).execute()
-    orden = len(res_hoy.data) + 1
+    # Consulta directa rápida del orden
+    res_hoy = supabase.table("registros").select("id", count="exact").eq("fecha", hoy).eq("grado_id", grado_id).execute()
+    orden = (res_hoy.count or 0) + 1
     
     puntos_extra = PUNTOS_EXTRA_PUNTUALIDAD if orden <= CUPOS_PUNTUALIDAD else 0
     puntos_totales = PUNTOS_BASE + puntos_extra
@@ -134,24 +136,34 @@ def registrar_asistencia(estudiante, grado_id, profesor_id):
     nueva_racha = estudiante["racha"] + 1 if estudiante["ultima_fecha"] == ayer else 1
     nuevos_puntos = estudiante["puntos"] + puntos_totales
     
+    # Actualizaciones inmediatas
     supabase.table("estudiantes").update({
-        "puntos": nuevos_puntos, "racha": nueva_racha, "ultima_fecha": hoy,
+        "puntos": nuevos_puntos, 
+        "racha": nueva_racha, 
+        "ultima_fecha": hoy,
         "total_asistencias": estudiante.get("total_asistencias", 0) + 1
     }).eq("id", estudiante["id"]).execute()
 
     supabase.table("registros").insert({
-        "estudiante_id": estudiante["id"], "fecha": hoy, "hora": hora_str,
-        "puntos_obtenidos": puntos_totales, "orden_llegada": orden,
-        "grado_id": grado_id, "profesor_id": profesor_id
+        "estudiante_id": estudiante["id"], 
+        "fecha": hoy, 
+        "hora": hora_str,
+        "puntos_obtenidos": puntos_totales, 
+        "orden_llegada": orden,
+        "grado_id": grado_id, 
+        "profesor_id": profesor_id
     }).execute()
 
     return {
-        "nombre": estudiante["nombre"], "puntos_ganados": puntos_totales,
-        "puntos_extra": puntos_extra, "puntos_totales": nuevos_puntos, "racha": nueva_racha
+        "nombre": estudiante["nombre"], 
+        "puntos_ganados": puntos_totales,
+        "puntos_extra": puntos_extra, 
+        "puntos_totales": nuevos_puntos, 
+        "racha": nueva_racha
     }
 
 # ================================================================
-# VENTANA CELEBRACIÓN CON VOZ
+# VENTANA CELEBRACIÓN CON SALUDO DE MAÑANA Y AUDIO INSTANTÁNEO
 # ================================================================
 @st.dialog("🎉 ¡Asistencia Registrada!", width="large")
 def ventana_celebracion(res):
@@ -160,30 +172,32 @@ def ventana_celebracion(res):
     puntos_totales = res["puntos_totales"]
     racha = res["racha"]
     
-    hora = datetime.datetime.now().hour
-    saludo_hablado = "Buenos días" if 5 <= hora < 12 else ("Buenas tardes" if 12 <= hora < 19 else "Buenas noches")
+    saludo_hablado = "Buenos días"
     frase_animo = random.choice(MENSAJES_ANIMO)
-    texto_voz = f"{saludo_hablado}, bienvenido {nombre}. Has ganado {puntos_ganados} puntos."
+    texto_voz = f"Buenos días, bienvenido {nombre}. Has ganado {puntos_ganados} puntos."
 
     st.markdown(f"""
-        <div style="background-color: #22C55E; color: white; padding: 30px; border-radius: 20px; text-align: center;">
-            <h2 style="color: #FFE066;">🌟 ¡{saludo_hablado}, {nombre}! 🌟</h2>
-            <h1 style="color: #FFE066; font-size: 45px;">{nombre}</h1>
-            <p style="font-size: 20px;">✨ +{puntos_ganados} puntos ganados</p>
-            <p style="font-size: 22px; font-weight: bold;">🔥 Racha: {racha} día(s) | Puntos: {puntos_totales}</p>
-            <h3 style="color: #FFE066;">{frase_animo}</h3>
+        <div style="background-color: #22C55E; color: white; padding: 25px; border-radius: 20px; text-align: center;">
+            <h2 style="color: #FFE066; margin:0;">🌟 ¡{saludo_hablado}, {nombre}! 🌟</h2>
+            <h1 style="color: #FFE066; font-size: 40px; margin: 10px 0;">{nombre}</h1>
+            <p style="font-size: 20px; margin:5px;">✨ +{puntos_ganados} puntos ganados</p>
+            <p style="font-size: 22px; font-weight: bold; margin:5px;">🔥 Racha: {racha} día(s) | Puntos: {puntos_totales}</p>
+            <h3 style="color: #FFE066; margin-top:10px;">{frase_animo}</h3>
         </div>
     """, unsafe_allow_html=True)
 
+    # Voz sintetizada inmediata
     components.html(f"""
         <script>
-            if ('speechSynthesis' in window) {{
-                window.speechSynthesis.cancel();
-                var msg = new SpeechSynthesisUtterance("{texto_voz}");
-                msg.lang = 'es-ES';
-                msg.rate = 1.0;
-                window.speechSynthesis.speak(msg);
-            }}
+            (function() {{
+                if ('speechSynthesis' in window) {{
+                    window.speechSynthesis.cancel();
+                    var msg = new SpeechSynthesisUtterance("{texto_voz}");
+                    msg.lang = 'es-ES';
+                    msg.rate = 1.1;
+                    window.speechSynthesis.speak(msg);
+                }}
+            }})();
         </script>
     """, height=0)
 
