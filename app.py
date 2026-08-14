@@ -380,10 +380,48 @@ else:
         # 2. REGISTRO DE ASISTENCIA
         # -------------------------------------------------------------
         with t_asistencia:
-            st.subheader("Marcar Asistencia Diaria")
             estudiantes = obtener_estudiantes(grado_sel_id, prof["id"])
             hoy_str = datetime.date.today().isoformat()
             
+            # --- CÁLCULO DE RESUMEN EN TIEMPO REAL ---
+            total_est = len(estudiantes) if estudiantes else 0
+            asistieron_count = 0
+            
+            if estudiantes:
+                for est in estudiantes:
+                    if ya_registrado_hoy(est["id"], hoy_str):
+                        asistieron_count += 1
+            
+            faltaron_count = total_est - asistieron_count
+
+            # --- ENCABEZADO CON CUADRO DE RESUMEN EN EL LADO DERECHO ---
+            col_titulo, col_resumen = st.columns([1.8, 1])
+            
+            with col_titulo:
+                st.subheader("Marcar Asistencia Diaria")
+            
+            with col_resumen:
+                if total_est > 0:
+                    c_red, c_green = st.columns(2)
+                    with c_red:
+                        st.markdown(f"""
+                            <div style="background-color: #FFEBEE; border: 2px solid #EF5350; border-radius: 12px; padding: 8px 12px; text-align: center;">
+                                <span style="color: #C62828; font-weight: bold; font-size: 13px;">✖ Faltaron</span><br>
+                                <span style="color: #C62828; font-size: 26px; font-weight: bold;">{faltaron_count}</span><br>
+                                <span style="color: #B71C1C; font-size: 11px;">{'estudiante' if faltaron_count == 1 else 'estudiantes'}</span>
+                            </div>
+                        """, unsafe_allow_html=True)
+                    with c_green:
+                        st.markdown(f"""
+                            <div style="background-color: #E8F5E9; border: 2px solid #66BB6A; border-radius: 12px; padding: 8px 12px; text-align: center;">
+                                <span style="color: #2E7D32; font-weight: bold; font-size: 13px;">✅ Asistieron</span><br>
+                                <span style="color: #2E7D32; font-size: 26px; font-weight: bold;">{asistieron_count}</span><br>
+                                <span style="color: #1B5E20; font-size: 11px;">{'estudiante' if asistieron_count == 1 else 'estudiantes'}</span>
+                            </div>
+                        """, unsafe_allow_html=True)
+
+            st.write("") # Espaciador visual
+
             if not estudiantes:
                 st.info("No hay alumnos registrados en este curso. Agrégalos desde la barra lateral.")
             else:
