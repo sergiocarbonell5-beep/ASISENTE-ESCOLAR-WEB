@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA (SUPABASE NUBE COMPLETO Y OPTIMIZADO)
+SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA (CON NOTIFICACIONES DE WHATSAPP)
 =====================================================================
 Todas las funcionalidades: Documentos, Asistencia Rápida, Calificaciones, 
-Convivencia, Tabla de Líderes y Gestión Completa de Cursos/Alumnos.
+Convivencia, Tabla de Líderes, Gestión Completa y Alertas por WhatsApp.
 """
 
 import os
@@ -11,6 +11,7 @@ import re
 import base64
 import datetime
 import random
+import urllib.parse
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
@@ -101,14 +102,20 @@ def obtener_estudiantes(grado_id, profesor_id):
     res = supabase.table("estudiantes").select("*").eq("grado_id", grado_id).eq("profesor_id", profesor_id).eq("activo", 1).order("nombre").execute()
     return res.data
 
-def agregar_estudiante(nombre, grado_id, profesor_id):
+def agregar_estudiante(nombre, telefono_acudiente, grado_id, profesor_id):
     supabase.table("estudiantes").insert({
-        "nombre": nombre, "grado_id": grado_id, "profesor_id": profesor_id,
+        "nombre": nombre, 
+        "telefono_acudiente": telefono_acudiente,
+        "grado_id": grado_id, 
+        "profesor_id": profesor_id,
         "puntos": 0, "racha": 0, "activo": 1
     }).execute()
 
-def editar_estudiante(estudiante_id, nuevo_nombre):
-    supabase.table("estudiantes").update({"nombre": nuevo_nombre}).eq("id", estudiante_id).execute()
+def editar_estudiante(estudiante_id, nuevo_nombre, nuevo_telefono):
+    supabase.table("estudiantes").update({
+        "nombre": nuevo_nombre,
+        "telefono_acudiente": nuevo_telefono
+    }).eq("id", estudiante_id).execute()
 
 def eliminar_estudiante(estudiante_id):
     supabase.table("estudiantes").update({"activo": 0}).eq("id", estudiante_id).execute()
@@ -117,7 +124,7 @@ def ya_registrado_hoy(estudiante_id, fecha):
     res = supabase.table("registros").select("id").eq("estudiante_id", estudiante_id).eq("fecha", fecha).execute()
     return len(res.data) > 0
 
-# REGISTRO DE ASISTENCIA RÁPIDO Y OPTIMIZADO
+# REGISTRO DE ASISTENCIA RÁPIDO
 def registrar_asistencia(estudiante, grado_id, profesor_id):
     hoy = datetime.date.today().isoformat()
     hora_str = datetime.datetime.now().strftime("%H:%M:%S")
@@ -125,7 +132,6 @@ def registrar_asistencia(estudiante, grado_id, profesor_id):
     if ya_registrado_hoy(estudiante["id"], hoy):
         return None
 
-    # Consulta directa rápida del orden
     res_hoy = supabase.table("registros").select("id", count="exact").eq("fecha", hoy).eq("grado_id", grado_id).execute()
     orden = (res_hoy.count or 0) + 1
     
@@ -136,7 +142,6 @@ def registrar_asistencia(estudiante, grado_id, profesor_id):
     nueva_racha = estudiante["racha"] + 1 if estudiante["ultima_fecha"] == ayer else 1
     nuevos_puntos = estudiante["puntos"] + puntos_totales
     
-    # Actualizaciones inmediatas
     supabase.table("estudiantes").update({
         "puntos": nuevos_puntos, 
         "racha": nueva_racha, 
@@ -162,6 +167,19 @@ def registrar_asistencia(estudiante, grado_id, profesor_id):
         "racha": nueva_racha
     }
 
+# GENERADOR DE ENLACES DE WHATSAPP
+def crear_link_whatsapp(telefono, nombre_estudiante, nombre_profesor):
+    if not telefono:
+        return None
+    # Limpiar caracteres no numéricos
+    num_limpio = re.sub(r'\D', '', str(telefono))
+    if len(num_limpio) == 10:
+        num_limpio = "57" + num_limpio  # Agregar código de Colombia si no lo tiene
+        
+    mensaje = f"Estimado acudiente, le saluda el/la profe {nombre_profesor} del {NOMBRE_ESCUELA}. Le informamos que el/la estudiante *{nombre_estudiante}* no ha registrado su asistencia a clases en el día de hoy. Por favor confirmar novedades. Muchas gracias."
+    msg_encoded = urllib.parse.quote(mensaje)
+    return f"https://wa.me/{num_limpio}?text={msg_encoded}"
+
 # ================================================================
 # VENTANA CELEBRACIÓN CON SALUDO DE MAÑANA Y AUDIO INSTANTÁNEO
 # ================================================================
@@ -186,7 +204,6 @@ def ventana_celebracion(res):
         </div>
     """, unsafe_allow_html=True)
 
-    # Voz sintetizada inmediata
     components.html(f"""
         <script>
             (function() {{
@@ -298,9 +315,10 @@ else:
         with st.expander("👤 Agregar / Editar Estudiante"):
             if grado_sel_id:
                 nom_est = st.text_input("Nombre completo de alumno:")
+                tel_est = st.text_input("Teléfono WhatsApp Acudiente:", placeholder="Ej: 3001234567")
                 if st.button("➕ Guardar Alumno", use_container_width=True):
                     if nom_est.strip():
-                        agregar_estudiante(nom_est.strip(), grado_sel_id, prof["id"])
+                        agregar_estudiante(nom_est.strip(), tel_est.strip(), grado_sel_id, prof["id"])
                         st.success("Alumno guardado.")
                         st.rerun()
                 
@@ -312,11 +330,13 @@ else:
                     est_obj = dict_est[est_edit_nom]
                     
                     nuevo_nom_val = st.text_input("Nuevo nombre:", value=est_obj["nombre"])
+                    nuevo_tel_val = st.text_input("Nuevo teléfono:", value=est_obj.get("telefono_acudiente") or "")
+                    
                     col_e1, col_e2 = st.columns(2)
                     with col_e1:
                         if st.button("✏️ Actualizar", use_container_width=True):
-                            editar_estudiante(est_obj["id"], nuevo_nom_val.strip())
-                            st.success("Nombre actualizado.")
+                            editar_estudiante(est_obj["id"], nuevo_nom_val.strip(), nuevo_tel_val.strip())
+                            st.success("Datos actualizados.")
                             st.rerun()
                     with col_e2:
                         if st.button("🗑️ Eliminar", use_container_width=True):
@@ -324,7 +344,7 @@ else:
                             st.success("Alumno eliminado.")
                             st.rerun()
 
-    # PESTAÑAS PRINCIPALES DEL SISTEMA
+    # PESTAÑAS PRINCIPALES
     st.title(f"📋 Asistente Educativo — {grado_sel_nombre if grado_sel_nombre else 'Crea un curso'}")
 
     if grado_sel_id:
@@ -336,9 +356,7 @@ else:
             "🏆 Tabla de Líderes"
         ])
 
-        # -------------------------------------------------------------
         # 1. DOCUMENTOS INSTITUCIONALES
-        # -------------------------------------------------------------
         with t_docs:
             st.subheader("📁 Repositorio de Documentos por Materia")
             tipo_doc_sel = st.radio("Categoría:", ["Planes de Área", "Planes de Clase", "Guías Educativas"], horizontal=True)
@@ -376,25 +394,24 @@ else:
                         bytes_dec = base64.b64decode(doc['contenido_b64'])
                         st.download_button("⬇️ Descargar", data=bytes_dec, file_name=doc['nombre'], use_container_width=True)
 
-        # -------------------------------------------------------------
-        # 2. REGISTRO DE ASISTENCIA
-        # -------------------------------------------------------------
+        # 2. REGISTRO DE ASISTENCIA CON ALERTAS DE WHATSAPP
         with t_asistencia:
             estudiantes = obtener_estudiantes(grado_sel_id, prof["id"])
             hoy_str = datetime.date.today().isoformat()
             
-            # --- CÁLCULO DE RESUMEN EN TIEMPO REAL ---
             total_est = len(estudiantes) if estudiantes else 0
             asistieron_count = 0
+            estudiantes_ausentes = []
             
             if estudiantes:
                 for est in estudiantes:
                     if ya_registrado_hoy(est["id"], hoy_str):
                         asistieron_count += 1
+                    else:
+                        estudiantes_ausentes.append(est)
             
             faltaron_count = total_est - asistieron_count
 
-            # --- ENCABEZADO CON CUADRO DE RESUMEN EN EL LADO DERECHO ---
             col_titulo, col_resumen = st.columns([1.8, 1])
             
             with col_titulo:
@@ -420,7 +437,25 @@ else:
                             </div>
                         """, unsafe_allow_html=True)
 
-            st.write("") # Espaciador visual
+            st.write("")
+
+            # SECCIÓN DESPLEGABLE: ENVIAR NOTIFICACIONES A AUSENTES
+            if estudiantes_ausentes:
+                with st.expander("📲 Notificar ausencias a Acudientes por WhatsApp", expanded=False):
+                    st.caption("Haz clic en el botón al lado de cada estudiante faltante para abrir su chat con la notificación lista:")
+                    for aus in estudiantes_ausentes:
+                        tel = aus.get("telefono_acudiente")
+                        c_a1, c_a2 = st.columns([2, 1])
+                        with c_a1:
+                            st.write(f"🔴 **{aus['nombre']}** - Tel: `{tel if tel else 'Sin registrar'}`")
+                        with c_a2:
+                            link_wa = crear_link_whatsapp(tel, aus['nombre'], prof['nombre'])
+                            if link_wa:
+                                st.link_button("📲 Enviar WhatsApp", link_wa, use_container_width=True)
+                            else:
+                                st.button("⚠️ Falta Teléfono", disabled=True, key=f"no_tel_{aus['id']}", use_container_width=True)
+
+            st.markdown("---")
 
             if not estudiantes:
                 st.info("No hay alumnos registrados en este curso. Agrégalos desde la barra lateral.")
@@ -444,9 +479,7 @@ else:
                                         st.balloons()
                                         ventana_celebracion(res)
 
-        # -------------------------------------------------------------
         # 3. CALIFICACIONES
-        # -------------------------------------------------------------
         with t_notas:
             st.subheader("📝 Registro de Calificaciones")
             estudiantes = obtener_estudiantes(grado_sel_id, prof["id"])
@@ -485,9 +518,7 @@ else:
                     ])
                     st.dataframe(df_notas, use_container_width=True)
 
-        # -------------------------------------------------------------
         # 4. CONVIVENCIA
-        # -------------------------------------------------------------
         with t_convivencia:
             st.subheader("⚖️ Observador del Estudiante / Convivencia")
             estudiantes = obtener_estudiantes(grado_sel_id, prof["id"])
@@ -523,9 +554,7 @@ else:
                     ])
                     st.dataframe(df_c, use_container_width=True)
 
-        # -------------------------------------------------------------
         # 5. TABLA DE LÍDERES
-        # -------------------------------------------------------------
         with t_lideres:
             st.subheader("🏆 Clasificación General por Puntos y Rachas")
             estudiantes = obtener_estudiantes(grado_sel_id, prof["id"])
