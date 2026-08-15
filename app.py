@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA (CON FORMATO OFICIAL EXCEL Y WHATSAPP)
+SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA (PDF FIDELIDAD IMAGEN Y DÍAS HÁBILES)
 ==================================================================================
-Todas las funcionalidades: Documentos, Asistencia Rápida, Calificaciones, 
-Convivencia, Tabla de Líderes, Alertas de WhatsApp y Exportación de Planilla Oficial.
+Funcionalidades: Formato PDF idéntico a imagen, Excel, Días Hábiles (Lunes a Viernes),
+Días No Lectivos/Sin Clase, Alertas por WhatsApp y Gestión Multidocente.
 """
 
 import os
@@ -17,10 +17,15 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
-# Importación de OpenPyXL para generación del formato oficial
+# Excel
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
+
+# PDF con ReportLab
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+from reportlab.lib import colors
 
 from supabase import create_client, Client
 
@@ -76,7 +81,7 @@ if "profesor" not in st.session_state:
     st.session_state.profesor = None
 
 # ================================================================
-# AUTENTICACIÓN DE PROFESORES
+# AUTENTICACIÓN
 # ================================================================
 def registrar_profesor(nombre, email, password):
     email_clean = email.strip().lower()
@@ -96,7 +101,7 @@ def login_profesor(email, password):
     return None
 
 # ================================================================
-# CONSULTAS BASE DE DATOS NUBE
+# CONSULTAS A LA NUBE
 # ================================================================
 def obtener_grados(profesor_id):
     res = supabase.table("grados").select("*").eq("profesor_id", profesor_id).order("nombre").execute()
@@ -137,7 +142,26 @@ def ya_registrado_hoy(estudiante_id, fecha):
     res = supabase.table("registros").select("id").eq("estudiante_id", estudiante_id).eq("fecha", fecha).execute()
     return len(res.data) > 0
 
-# REGISTRO DE ASISTENCIA RÁPIDO
+def es_dia_no_lectivo(fecha_str, grado_id, profesor_id):
+    try:
+        res = supabase.table("dias_no_lectivos").select("*").eq("fecha", fecha_str).eq("grado_id", grado_id).eq("profesor_id", profesor_id).execute()
+        return res.data[0] if res.data else None
+    except:
+        return None
+
+def registrar_dia_no_lectivo(fecha_str, motivo, grado_id, profesor_id):
+    try:
+        supabase.table("dias_no_lectivos").insert({
+            "fecha": fecha_str,
+            "motivo": motivo,
+            "grado_id": grado_id,
+            "profesor_id": profesor_id
+        }).execute()
+        return True
+    except Exception as e:
+        return False
+
+# REGISTRO DE ASISTENCIA
 def registrar_asistencia(estudiante, grado_id, profesor_id):
     hoy = datetime.date.today().isoformat()
     hora_str = datetime.datetime.now().strftime("%H:%M:%S")
@@ -180,7 +204,6 @@ def registrar_asistencia(estudiante, grado_id, profesor_id):
         "racha": nueva_racha
     }
 
-# GENERADOR DE ENLACES DE WHATSAPP
 def crear_link_whatsapp(telefono, nombre_estudiante, nombre_profesor):
     if not telefono:
         return None
@@ -193,8 +216,93 @@ def crear_link_whatsapp(telefono, nombre_estudiante, nombre_profesor):
     return f"https://wa.me/{num_limpio}?text={msg_encoded}"
 
 # ================================================================
-# GENERADOR EXCEL: PLANILLA OFICIAL C.E.R. SIRAVITA
+# GENERACIÓN DE PDF FIDELIDAD OFICIAL
 # ================================================================
+def generar_pdf_asistencia_oficial(grado_nombre, profesor_nombre, registros_mes, estudiantes_lista, mes_nombre, sede_nombre=SEDE_DEFECTO):
+    buffer = io.BytesIO()
+    p = canvas.Canvas(buffer, pagesize=letter)
+    width, height = letter
+
+    # Dibujar membrete estructurado
+    p.setFont("Helvetica-Bold", 10)
+    p.drawCentredString(width / 2.0, height - 30, "REPÚBLICA DE COLOMBIA")
+    p.drawCentredString(width / 2.0, height - 42, "SECRETARÍA DE EDUCACIÓN DEPARTAMENTAL NORTE DE SANTANDER")
+    p.drawCentredString(width / 2.0, height - 54, "CENTRO EDUCATIVO RURAL SIRAVITA")
+    p.drawCentredString(width / 2.0, height - 66, "MUNICIPIO DE ARBOLEDAS")
+    
+    p.setFont("Helvetica", 7)
+    p.drawCentredString(width / 2.0, height - 76, "DANE 254051000139 | DECRETO 00252 | RESOLUCIÓN 008708")
+    
+    p.setFont("Helvetica-BoldOblique", 9)
+    p.setFillColor(colors.HexColor("#2E7D32"))
+    p.drawCentredString(width / 2.0, height - 88, "Lema: Con Escuela nueva y metodología activa para una educación proactiva.")
+    
+    p.setFont("Helvetica-Bold", 13)
+    p.setFillColor(colors.HexColor("#004D25"))
+    p.drawCentredString(width / 2.0, height - 110, "REGISTRO CONTROL ASISTENCIA")
+
+    p.setFont("Helvetica-Bold", 9)
+    p.setFillColor(colors.black)
+    p.drawString(40, height - 130, f"SEDE: {sede_nombre.upper()}        MES DE: {mes_nombre.upper()}        AÑO: 2026")
+
+    # Tabla
+    x_start = 40
+    y_start = height - 150
+    col_w_nombre = 140
+    col_w_grado = 45
+    col_w_dia = 9.8
+    col_w_total = 25
+
+    # Encabezado Tabla
+    p.setFillColor(colors.HexColor("#1B432C"))
+    p.rect(x_start, y_start - 15, col_w_nombre + col_w_grado + (col_w_dia * 31) + col_w_total, 15, fill=True, stroke=True)
+    
+    p.setFillColor(colors.white)
+    p.setFont("Helvetica-Bold", 7)
+    p.drawString(x_start + 5, y_start - 11, "ALUMNOS")
+    p.drawString(x_start + col_w_nombre + 5, y_start - 11, "GRADO")
+    
+    for d in range(1, 32):
+        p.drawString(x_start + col_w_nombre + col_w_grado + ((d - 1) * col_w_dia) + 2, y_start - 11, str(d))
+    p.drawString(x_start + col_w_nombre + col_w_grado + (31 * col_w_dia) + 2, y_start - 11, "TOT")
+
+    # Filas Alumnos
+    y_curr = y_start - 15
+    p.setFillColor(colors.black)
+    p.setFont("Helvetica", 7)
+
+    for est in estudiantes_lista:
+        y_curr -= 14
+        p.rect(x_start, y_curr, col_w_nombre + col_w_grado + (col_w_dia * 31) + col_w_total, 14, fill=False, stroke=True)
+        
+        p.drawString(x_start + 3, y_curr + 4, str(est["nombre"])[:28])
+        p.drawString(x_start + col_w_nombre + 3, y_curr + 4, str(grado_nombre)[:8])
+
+        tot_asist = 0
+        for d in range(1, 32):
+            asistio = any(r["estudiante_id"] == est["id"] and int(r["fecha"].split("-")[2]) == d for r in registros_mes)
+            if asistio:
+                tot_asist += 1
+                p.setFillColor(colors.HexColor("#2E7D32"))
+                p.setFont("Helvetica-Bold", 7)
+                p.drawString(x_start + col_w_nombre + col_w_grado + ((d - 1) * col_w_dia) + 2, y_curr + 4, "✓")
+                p.setFillColor(colors.black)
+                p.setFont("Helvetica", 7)
+
+        p.drawString(x_start + col_w_nombre + col_w_grado + (31 * col_w_dia) + 5, y_curr + 4, str(tot_asist))
+
+    # Pie de página
+    p.setFont("Helvetica-Bold", 9)
+    p.drawString(40, 40, f"DOCENTE: {profesor_nombre.upper()}")
+    p.setFont("Helvetica-Oblique", 7)
+    p.drawString(40, 25, "Documento Oficial - Uso Académico - C.E.R. Siravita")
+
+    p.showPage()
+    p.save()
+    buffer.seek(0)
+    return buffer
+
+# GENERACIÓN EXCEL
 def generar_excel_asistencia_oficial(grado_nombre, profesor_nombre, registros_mes, estudiantes_lista, mes_nombre, sede_nombre=SEDE_DEFECTO):
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -225,7 +333,6 @@ def generar_excel_asistencia_oficial(grado_nombre, profesor_nombre, registros_me
         bottom=Side(style='thin', color='B0BEC5')
     )
 
-    # Encabezado Institucional
     ws.merge_cells("A1:AH1")
     ws["A1"] = "REPÚBLICA DE COLOMBIA"
     ws["A1"].font = font_encabezado_bold
@@ -247,7 +354,7 @@ def generar_excel_asistencia_oficial(grado_nombre, profesor_nombre, registros_me
     ws["A4"].alignment = align_center
 
     ws.merge_cells("A5:AH5")
-    ws["A5"] = "DANE 254051000139 | DECRETO DE CREACIÓN 00252 DEL 12 DE ABRIL DE 2005 | RESOLUCIÓN DE APROBACIÓN DE ESTUDIOS: 008708-24-10-2.024"
+    ws["A5"] = "DANE 254051000139 | DECRETO DE CREACIÓN 00252 DEL 12 DE ABRIL DE 2005"
     ws["A5"].font = Font(name="Calibri", size=8)
     ws["A5"].alignment = align_center
 
@@ -256,7 +363,6 @@ def generar_excel_asistencia_oficial(grado_nombre, profesor_nombre, registros_me
     ws["A6"].font = font_lema
     ws["A6"].alignment = align_center
 
-    # Título y Subtítulos
     ws.merge_cells("A8:AH8")
     ws["A8"] = "REGISTRO CONTROL ASISTENCIA"
     ws["A8"].font = Font(name="Calibri", size=14, bold=True, color=VERDE_OSCURO)
@@ -267,7 +373,6 @@ def generar_excel_asistencia_oficial(grado_nombre, profesor_nombre, registros_me
     ws["A10"].font = font_subtitulos
     ws["A10"].alignment = align_left
 
-    # Encabezado Tabla
     headers = ["ALUMNOS", "GRADO"] + [str(i) for i in range(1, 32)] + ["TOTAL"]
     
     for col_idx, text in enumerate(headers, start=1):
@@ -277,13 +382,11 @@ def generar_excel_asistencia_oficial(grado_nombre, profesor_nombre, registros_me
         cell.alignment = align_center
         cell.border = thin_border
 
-    # Fila decorativa crema (Fila 13)
     for col_idx in range(1, len(headers) + 1):
         cell = ws.cell(row=13, column=col_idx)
         cell.fill = fill_row_top
         cell.border = thin_border
 
-    # Cargar filas de alumnos
     row_start = 14
     for est in estudiantes_lista:
         ws.cell(row=row_start, column=1, value=est["nombre"]).font = font_data
@@ -297,12 +400,7 @@ def generar_excel_asistencia_oficial(grado_nombre, profesor_nombre, registros_me
         asistencias_total = 0
         for dia in range(1, 32):
             col_idx = dia + 2
-            # Verificar si existió asistencia en este día del mes
-            asistio = any(
-                r["estudiante_id"] == est["id"] and 
-                int(r["fecha"].split("-")[2]) == dia 
-                for r in registros_mes
-            )
+            asistio = any(r["estudiante_id"] == est["id"] and int(r["fecha"].split("-")[2]) == dia for r in registros_mes)
             val = "✓" if asistio else ""
             if asistio:
                 asistencias_total += 1
@@ -319,18 +417,15 @@ def generar_excel_asistencia_oficial(grado_nombre, profesor_nombre, registros_me
 
         row_start += 1
 
-    # Rellenar filas vacías para mantener la estética uniforme
     while row_start < 28:
         for col_idx in range(1, 35):
             c = ws.cell(row=row_start, column=col_idx)
             c.border = thin_border
         row_start += 1
 
-    # Pie de página y Firma
     ws.cell(row=30, column=1, value=f"DOCENTE: {profesor_nombre.upper()}").font = font_subtitulos
     ws.cell(row=32, column=1, value="Documento Oficial - Uso Académico").font = Font(name="Calibri", size=8, italic=True)
 
-    # Anchos de Columna
     ws.column_dimensions['A'].width = 30
     ws.column_dimensions['B'].width = 12
     for col in range(3, 34):
@@ -557,11 +652,16 @@ else:
                         bytes_dec = base64.b64decode(doc['contenido_b64'])
                         st.download_button("⬇️ Descargar", data=bytes_dec, file_name=doc['nombre'], use_container_width=True)
 
-        # 2. REGISTRO DE ASISTENCIA CON WHATSAPP Y EXPORTACIÓN OFICIAL
+        # 2. REGISTRO DE ASISTENCIA CON DÍAS HÁBILES Y FORMATO PDF/EXCEL
         with t_asistencia:
             estudiantes = obtener_estudiantes(grado_sel_id, prof["id"])
             hoy_dt = datetime.date.today()
             hoy_str = hoy_dt.isoformat()
+            dia_semana = hoy_dt.weekday() # 0: Lunes, 5: Sábado, 6: Domingo
+            es_fin_semana = dia_semana >= 5
+            
+            # Verificar si hoy es día no lectivo
+            registro_no_lectivo = es_dia_no_lectivo(hoy_str, grado_sel_id, prof["id"])
             
             total_est = len(estudiantes) if estudiantes else 0
             asistieron_count = 0
@@ -576,10 +676,11 @@ else:
             
             faltaron_count = total_est - asistieron_count
 
-            col_titulo, col_resumen = st.columns([1.8, 1])
+            col_titulo, col_resumen = st.columns([1.6, 1])
             
             with col_titulo:
                 st.subheader("Marcar Asistencia Diaria")
+                st.caption(f"📅 Fecha actual: {hoy_str} ({'Fin de Semana - Sin Clases' if es_fin_semana else 'Día Hábil'})")
             
             with col_resumen:
                 if total_est > 0:
@@ -603,33 +704,64 @@ else:
 
             st.write("")
 
-            # BOTÓN PARA EXPORTAR FORMATO OFICIAL C.E.R. SIRAVITA
+            # BOTONES DE EXPORTACIÓN (PDF EXACTO E EXCEL)
             if estudiantes:
                 mes_actual_nombre = MESES_ESPANOL[hoy_dt.month - 1]
                 res_reg = supabase.table("registros").select("*").eq("grado_id", grado_sel_id).execute()
                 
-                excel_bytes = generar_excel_asistencia_oficial(
-                    grado_nombre=grado_sel_nombre,
-                    profesor_nombre=prof['nombre'],
-                    registros_mes=res_reg.data or [],
-                    estudiantes_lista=estudiantes,
-                    mes_nombre=mes_actual_nombre,
-                    sede_nombre=SEDE_DEFECTO
-                )
+                col_ex1, col_ex2 = st.columns(2)
+                with col_ex1:
+                    pdf_bytes = generar_pdf_asistencia_oficial(
+                        grado_nombre=grado_sel_nombre,
+                        profesor_nombre=prof['nombre'],
+                        registros_mes=res_reg.data or [],
+                        estudiantes_lista=estudiantes,
+                        mes_nombre=mes_actual_nombre,
+                        sede_nombre=SEDE_DEFECTO
+                    )
+                    st.download_button(
+                        label="📄 Exportar Planilla Oficial en PDF (Formato Imagen)",
+                        data=pdf_bytes,
+                        file_name=f"Planilla_Oficial_Asistencia_{grado_sel_nombre}_{mes_actual_nombre}_2026.pdf",
+                        mime="application/pdf",
+                        use_container_width=True,
+                        type="primary"
+                    )
+                with col_ex2:
+                    excel_bytes = generar_excel_asistencia_oficial(
+                        grado_nombre=grado_sel_nombre,
+                        profesor_nombre=prof['nombre'],
+                        registros_mes=res_reg.data or [],
+                        estudiantes_lista=estudiantes,
+                        mes_nombre=mes_actual_nombre,
+                        sede_nombre=SEDE_DEFECTO
+                    )
+                    st.download_button(
+                        label="📊 Exportar Planilla Oficial en Excel (.xlsx)",
+                        data=excel_bytes,
+                        file_name=f"Control_Asistencia_{grado_sel_nombre}_{mes_actual_nombre}_2026.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True
+                    )
 
-                st.download_button(
-                    label="📥 Exportar Planilla Oficial C.E.R. Siravita (Excel)",
-                    data=excel_bytes,
-                    file_name=f"Control_Asistencia_{grado_sel_nombre}_{mes_actual_nombre}_2026.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
-                    type="primary"
-                )
+            st.markdown("---")
+
+            # REGISTRO DE DÍAS NO LECTIVOS / SIN CLASE
+            with st.expander("🚫 Registrar Día Sin Clase (Festivo, Paro, Jornada Pedagógica)", expanded=False):
+                if registro_no_lectivo:
+                    st.warning(f"⚠️ El día de hoy ({hoy_str}) fue registrado como DÍA SIN CLASE: **{registro_no_lectivo['motivo']}**")
+                else:
+                    motivo_txt = st.text_input("Motivo de la suspensión de clases:", placeholder="Ej. Jornada Pedagógica de Docentes / Clima")
+                    if st.button("📌 Declarar Día Sin Clase"):
+                        if motivo_txt.strip():
+                            if registrar_dia_no_lectivo(hoy_str, motivo_txt.strip(), grado_sel_id, prof["id"]):
+                                st.success("Día registrado como no lectivo. No afectará las asistencias.")
+                                st.rerun()
 
             st.markdown("---")
 
             # NOTIFICACIONES A AUSENTES POR WHATSAPP
-            if estudiantes_ausentes:
+            if estudiantes_ausentes and not es_fin_semana and not registro_no_lectivo:
                 with st.expander("📲 Notificar ausencias a Acudientes por WhatsApp", expanded=False):
                     st.caption("Haz clic en el botón al lado de cada estudiante faltante para abrir su chat con la notificación lista:")
                     for aus in estudiantes_ausentes:
@@ -644,9 +776,12 @@ else:
                             else:
                                 st.button("⚠️ Falta Teléfono", disabled=True, key=f"no_tel_{aus['id']}", use_container_width=True)
 
-            st.markdown("---")
-
-            if not estudiantes:
+            # CONTROL DE ASISTENCIA DIARIA (LUNES A VIERNES)
+            if es_fin_semana:
+                st.info("🌴 Hoy es fin de semana (Sábado/Domingo). El registro de asistencia no está activo.")
+            elif registro_no_lectivo:
+                st.info(f"🚫 Día declarado sin actividades escolares por: **{registro_no_lectivo['motivo']}**.")
+            elif not estudiantes:
                 st.info("No hay alumnos registrados en este curso. Agrégalos desde la barra lateral.")
             else:
                 cols = st.columns(3)
