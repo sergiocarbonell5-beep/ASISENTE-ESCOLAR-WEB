@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA (CON NOTIFICACIONES DE WHATSAPP)
-=====================================================================
+SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA (CON FORMATO OFICIAL EXCEL Y WHATSAPP)
+==================================================================================
 Todas las funcionalidades: Documentos, Asistencia Rápida, Calificaciones, 
-Convivencia, Tabla de Líderes, Gestión Completa y Alertas por WhatsApp.
+Convivencia, Tabla de Líderes, Alertas de WhatsApp y Exportación de Planilla Oficial.
 """
 
 import os
 import re
+import io
 import base64
 import datetime
 import random
@@ -15,6 +16,12 @@ import urllib.parse
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
+
+# Importación de OpenPyXL para generación del formato oficial
+import openpyxl
+from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+from openpyxl.utils import get_column_letter
+
 from supabase import create_client, Client
 
 # ================================================================
@@ -29,6 +36,7 @@ st.set_page_config(
 
 APP_TITLE = "Asistente Educativo Sergio Carbonell"
 NOMBRE_ESCUELA = "C.E.R. Siravita"
+SEDE_DEFECTO = "Chicago Alto"
 
 PUNTOS_BASE = 10
 PUNTOS_EXTRA_PUNTUALIDAD = 5
@@ -46,6 +54,11 @@ MENSAJES_ANIMO = [
 MATERIAS_LISTA = [
     "Inglés", "Matemáticas", "Español", "Sociales", 
     "Naturales", "Artística", "Ética", "Religión", "Informática"
+]
+
+MESES_ESPANOL = [
+    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", 
+    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
 ]
 
 # ================================================================
@@ -171,14 +184,164 @@ def registrar_asistencia(estudiante, grado_id, profesor_id):
 def crear_link_whatsapp(telefono, nombre_estudiante, nombre_profesor):
     if not telefono:
         return None
-    # Limpiar caracteres no numéricos
     num_limpio = re.sub(r'\D', '', str(telefono))
     if len(num_limpio) == 10:
-        num_limpio = "57" + num_limpio  # Agregar código de Colombia si no lo tiene
+        num_limpio = "57" + num_limpio
         
     mensaje = f"Estimado acudiente, le saluda el/la profe {nombre_profesor} del {NOMBRE_ESCUELA}. Le informamos que el/la estudiante *{nombre_estudiante}* no ha registrado su asistencia a clases en el día de hoy. Por favor confirmar novedades. Muchas gracias."
     msg_encoded = urllib.parse.quote(mensaje)
     return f"https://wa.me/{num_limpio}?text={msg_encoded}"
+
+# ================================================================
+# GENERADOR EXCEL: PLANILLA OFICIAL C.E.R. SIRAVITA
+# ================================================================
+def generar_excel_asistencia_oficial(grado_nombre, profesor_nombre, registros_mes, estudiantes_lista, mes_nombre, sede_nombre=SEDE_DEFECTO):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Control Asistencia"
+    ws.views.sheetView[0].showGridLines = True
+
+    VERDE_OSCURO = "004D25"
+    VERDE_LEMA = "2E7D32"
+    VERDE_HEADER_TABLA = "1B432C"
+    AMARILLO_CREMA = "FFF9C4"
+    
+    fill_header_tabla = PatternFill(start_color=VERDE_HEADER_TABLA, end_color=VERDE_HEADER_TABLA, fill_type="solid")
+    fill_row_top = PatternFill(start_color=AMARILLO_CREMA, end_color=AMARILLO_CREMA, fill_type="solid")
+
+    font_encabezado_bold = Font(name="Calibri", size=10, bold=True, color="000000")
+    font_lema = Font(name="Calibri", size=10, bold=True, italic=True, color=VERDE_LEMA)
+    font_subtitulos = Font(name="Calibri", size=11, bold=True, color="000000")
+    font_th = Font(name="Calibri", size=9, bold=True, color="FFFFFF")
+    font_data = Font(name="Calibri", size=9)
+
+    align_center = Alignment(horizontal="center", vertical="center")
+    align_left = Alignment(horizontal="left", vertical="center")
+
+    thin_border = Border(
+        left=Side(style='thin', color='B0BEC5'),
+        right=Side(style='thin', color='B0BEC5'),
+        top=Side(style='thin', color='B0BEC5'),
+        bottom=Side(style='thin', color='B0BEC5')
+    )
+
+    # Encabezado Institucional
+    ws.merge_cells("A1:AH1")
+    ws["A1"] = "REPÚBLICA DE COLOMBIA"
+    ws["A1"].font = font_encabezado_bold
+    ws["A1"].alignment = align_center
+
+    ws.merge_cells("A2:AH2")
+    ws["A2"] = "SECRETARÍA DE EDUCACIÓN DEPARTAMENTAL NORTE DE SANTANDER"
+    ws["A2"].font = font_encabezado_bold
+    ws["A2"].alignment = align_center
+
+    ws.merge_cells("A3:AH3")
+    ws["A3"] = "CENTRO EDUCATIVO RURAL SIRAVITA"
+    ws["A3"].font = font_encabezado_bold
+    ws["A3"].alignment = align_center
+
+    ws.merge_cells("A4:AH4")
+    ws["A4"] = "MUNICIPIO DE ARBOLEDAS"
+    ws["A4"].font = font_encabezado_bold
+    ws["A4"].alignment = align_center
+
+    ws.merge_cells("A5:AH5")
+    ws["A5"] = "DANE 254051000139 | DECRETO DE CREACIÓN 00252 DEL 12 DE ABRIL DE 2005 | RESOLUCIÓN DE APROBACIÓN DE ESTUDIOS: 008708-24-10-2.024"
+    ws["A5"].font = Font(name="Calibri", size=8)
+    ws["A5"].alignment = align_center
+
+    ws.merge_cells("A6:AH6")
+    ws["A6"] = "Lema: Con Escuela nueva y metodología activa para una educación proactiva."
+    ws["A6"].font = font_lema
+    ws["A6"].alignment = align_center
+
+    # Título y Subtítulos
+    ws.merge_cells("A8:AH8")
+    ws["A8"] = "REGISTRO CONTROL ASISTENCIA"
+    ws["A8"].font = Font(name="Calibri", size=14, bold=True, color=VERDE_OSCURO)
+    ws["A8"].alignment = align_center
+
+    ws.merge_cells("A10:AH10")
+    ws["A10"] = f"SEDE: {sede_nombre.upper()}     |     MES DE: {mes_nombre.upper()}     |     AÑO: 2026"
+    ws["A10"].font = font_subtitulos
+    ws["A10"].alignment = align_left
+
+    # Encabezado Tabla
+    headers = ["ALUMNOS", "GRADO"] + [str(i) for i in range(1, 32)] + ["TOTAL"]
+    
+    for col_idx, text in enumerate(headers, start=1):
+        cell = ws.cell(row=12, column=col_idx, value=text)
+        cell.font = font_th
+        cell.fill = fill_header_tabla
+        cell.alignment = align_center
+        cell.border = thin_border
+
+    # Fila decorativa crema (Fila 13)
+    for col_idx in range(1, len(headers) + 1):
+        cell = ws.cell(row=13, column=col_idx)
+        cell.fill = fill_row_top
+        cell.border = thin_border
+
+    # Cargar filas de alumnos
+    row_start = 14
+    for est in estudiantes_lista:
+        ws.cell(row=row_start, column=1, value=est["nombre"]).font = font_data
+        ws.cell(row=row_start, column=1).alignment = align_left
+        ws.cell(row=row_start, column=1).border = thin_border
+
+        ws.cell(row=row_start, column=2, value=grado_nombre).font = font_data
+        ws.cell(row=row_start, column=2).alignment = align_center
+        ws.cell(row=row_start, column=2).border = thin_border
+
+        asistencias_total = 0
+        for dia in range(1, 32):
+            col_idx = dia + 2
+            # Verificar si existió asistencia en este día del mes
+            asistio = any(
+                r["estudiante_id"] == est["id"] and 
+                int(r["fecha"].split("-")[2]) == dia 
+                for r in registros_mes
+            )
+            val = "✓" if asistio else ""
+            if asistio:
+                asistencias_total += 1
+
+            cell_d = ws.cell(row=row_start, column=col_idx, value=val)
+            cell_d.font = Font(name="Calibri", size=10, bold=True, color="2E7D32")
+            cell_d.alignment = align_center
+            cell_d.border = thin_border
+
+        cell_t = ws.cell(row=row_start, column=34, value=asistencias_total)
+        cell_t.font = Font(name="Calibri", size=9, bold=True)
+        cell_t.alignment = align_center
+        cell_t.border = thin_border
+
+        row_start += 1
+
+    # Rellenar filas vacías para mantener la estética uniforme
+    while row_start < 28:
+        for col_idx in range(1, 35):
+            c = ws.cell(row=row_start, column=col_idx)
+            c.border = thin_border
+        row_start += 1
+
+    # Pie de página y Firma
+    ws.cell(row=30, column=1, value=f"DOCENTE: {profesor_nombre.upper()}").font = font_subtitulos
+    ws.cell(row=32, column=1, value="Documento Oficial - Uso Académico").font = Font(name="Calibri", size=8, italic=True)
+
+    # Anchos de Columna
+    ws.column_dimensions['A'].width = 30
+    ws.column_dimensions['B'].width = 12
+    for col in range(3, 34):
+        col_letter = get_column_letter(col)
+        ws.column_dimensions[col_letter].width = 3.5
+    ws.column_dimensions['AH'].width = 8
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output
 
 # ================================================================
 # VENTANA CELEBRACIÓN CON SALUDO DE MAÑANA Y AUDIO INSTANTÁNEO
@@ -394,10 +557,11 @@ else:
                         bytes_dec = base64.b64decode(doc['contenido_b64'])
                         st.download_button("⬇️ Descargar", data=bytes_dec, file_name=doc['nombre'], use_container_width=True)
 
-        # 2. REGISTRO DE ASISTENCIA CON ALERTAS DE WHATSAPP
+        # 2. REGISTRO DE ASISTENCIA CON WHATSAPP Y EXPORTACIÓN OFICIAL
         with t_asistencia:
             estudiantes = obtener_estudiantes(grado_sel_id, prof["id"])
-            hoy_str = datetime.date.today().isoformat()
+            hoy_dt = datetime.date.today()
+            hoy_str = hoy_dt.isoformat()
             
             total_est = len(estudiantes) if estudiantes else 0
             asistieron_count = 0
@@ -439,7 +603,32 @@ else:
 
             st.write("")
 
-            # SECCIÓN DESPLEGABLE: ENVIAR NOTIFICACIONES A AUSENTES
+            # BOTÓN PARA EXPORTAR FORMATO OFICIAL C.E.R. SIRAVITA
+            if estudiantes:
+                mes_actual_nombre = MESES_ESPANOL[hoy_dt.month - 1]
+                res_reg = supabase.table("registros").select("*").eq("grado_id", grado_sel_id).execute()
+                
+                excel_bytes = generar_excel_asistencia_oficial(
+                    grado_nombre=grado_sel_nombre,
+                    profesor_nombre=prof['nombre'],
+                    registros_mes=res_reg.data or [],
+                    estudiantes_lista=estudiantes,
+                    mes_nombre=mes_actual_nombre,
+                    sede_nombre=SEDE_DEFECTO
+                )
+
+                st.download_button(
+                    label="📥 Exportar Planilla Oficial C.E.R. Siravita (Excel)",
+                    data=excel_bytes,
+                    file_name=f"Control_Asistencia_{grado_sel_nombre}_{mes_actual_nombre}_2026.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                    type="primary"
+                )
+
+            st.markdown("---")
+
+            # NOTIFICACIONES A AUSENTES POR WHATSAPP
             if estudiantes_ausentes:
                 with st.expander("📲 Notificar ausencias a Acudientes por WhatsApp", expanded=False):
                     st.caption("Haz clic en el botón al lado de cada estudiante faltante para abrir su chat con la notificación lista:")
