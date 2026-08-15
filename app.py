@@ -2,7 +2,7 @@
 """
 SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA (PDF FIDELIDAD IMAGEN Y DÍAS HÁBILES)
 ==================================================================================
-Funcionalidades: Formato PDF idéntico a imagen, Excel, Días Hábiles (Lunes a Viernes),
+Funcionalidades: Formato PDF oficial, Excel, Días Hábiles (Lunes a Viernes),
 Días No Lectivos/Sin Clase, Alertas por WhatsApp y Gestión Multidocente.
 """
 
@@ -158,7 +158,7 @@ def registrar_dia_no_lectivo(fecha_str, motivo, grado_id, profesor_id):
             "profesor_id": profesor_id
         }).execute()
         return True
-    except Exception as e:
+    except Exception:
         return False
 
 # REGISTRO DE ASISTENCIA
