@@ -2,8 +2,8 @@
 """
 SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA (PDF FIDELIDAD 100% SOBRE PLANTILLA IMAGEN)
 =======================================================================================
-Funcionalidades: PDF sobre plantilla oficial, Excel, Gestión de Excusas/Novedades,
-Edición Manual de Asistencia, Alertas de WhatsApp y Gestión Multidocente.
+Funcionalidades: PDF con asistencias (✓) y excusas (E), Excel, Estadísticas Mensuales,
+Filtros en Observador, Alertas de WhatsApp y Gestión Multidocente.
 """
 
 import os
@@ -207,9 +207,16 @@ def guardar_excusa(estudiante_id, fecha_str, motivo, profesor_id):
         "estudiante_id": estudiante_id,
         "fecha": fecha_str,
         "tipo": "Excusa / Justificación",
-        "descripcion": f"EXCUSA DE ASISTENCIA: {motivo}",
+        "descripcion": f"EXCUSA DE ASISTENCIA ({fecha_str}): {motivo}",
         "profesor_id": profesor_id
     }).execute()
+
+def obtener_excusas_mes(profesor_id, grado_id):
+    try:
+        res = supabase.table("convivencia").select("*").eq("profesor_id", profesor_id).eq("tipo", "Excusa / Justificación").execute()
+        return res.data or []
+    except Exception:
+        return []
 
 def crear_link_whatsapp(telefono, nombre_estudiante, nombre_profesor):
     if not telefono:
@@ -223,9 +230,9 @@ def crear_link_whatsapp(telefono, nombre_estudiante, nombre_profesor):
     return f"https://wa.me/{num_limpio}?text={msg_encoded}"
 
 # ================================================================
-# GENERACIÓN DE PDF EXACTO SOBRE PLANTILLA DE IMAGEN
+# GENERACIÓN DE PDF EXACTO SOBRE PLANTILLA CON CHULITO Y EXCUSA (E)
 # ================================================================
-def generar_pdf_asistencia_oficial(grado_nombre, profesor_nombre, registros_mes, estudiantes_lista, mes_nombre, sede_nombre=SEDE_DEFECTO):
+def generar_pdf_asistencia_oficial(grado_nombre, profesor_nombre, registros_mes, excusas_mes, estudiantes_lista, mes_nombre, sede_nombre=SEDE_DEFECTO):
     buffer = io.BytesIO()
     p = canvas.Canvas(buffer, pagesize=letter)
     width, height = letter # 612 x 792 pt
@@ -244,15 +251,26 @@ def generar_pdf_asistencia_oficial(grado_nombre, profesor_nombre, registros_mes,
     p.drawString(110, 415, str(sede_nombre).upper())
     p.drawString(330, 415, str(mes_nombre).upper())
 
-    # 3. Coordenadas Calibradas para las Filas de la Tabla
-    x_alumnos = 8         # Margen ajustado a la izquierda
-    x_grado = 78          # Estrictamente contenido en la casilla GRADO
-    x_dias_inicio = 138.5 # Alineado con la primera columna de círculos (día 1)
-    w_dia = 13.5          # Ancho horizontal entre círculos
-    x_total = 560         # Columna TOTAL
+    # Map de excusas por estudiante y día
+    set_excusas = set()
+    for exc in excusas_mes:
+        try:
+            e_id = exc["estudiante_id"]
+            f_str = exc["fecha"]
+            dia_num = int(f_str.split("-")[2])
+            set_excusas.add((e_id, dia_num))
+        except Exception:
+            pass
 
-    y_fila_inicio = 328   # Comienza exactamente en el primer renglón con círculos
-    h_fila = 19.1         # Distancia vertical exacta entre renglones
+    # 3. Coordenadas Calibradas
+    x_alumnos = 8
+    x_grado = 78
+    x_dias_inicio = 138.5
+    w_dia = 13.5
+    x_total = 560
+
+    y_fila_inicio = 328
+    h_fila = 19.1
 
     for idx, est in enumerate(estudiantes_lista[:12]):
         y_pos = y_fila_inicio - (idx * h_fila)
@@ -267,16 +285,23 @@ def generar_pdf_asistencia_oficial(grado_nombre, profesor_nombre, registros_mes,
         p.setFillColor(colors.HexColor("#374151"))
         p.drawString(x_grado, y_pos, str(grado_nombre)[:6])
 
-        # Asistencias por día (✓ Verde Institucional centrado)
+        # Marcaciones por día (✓ verde para Asistencia, E naranja para Excusa)
         tot_asist = 0
         for d in range(1, 32):
             asistio = any(r["estudiante_id"] == est["id"] and int(r["fecha"].split("-")[2]) == d for r in registros_mes)
+            tiene_excusa = (est["id"], d) in set_excusas
+            
+            x_check = x_dias_inicio + ((d - 1) * w_dia)
+            
             if asistio:
                 tot_asist += 1
-                x_check = x_dias_inicio + ((d - 1) * w_dia)
                 p.setFont("Helvetica-Bold", 11)
                 p.setFillColor(colors.HexColor("#1B5E20"))
                 p.drawString(x_check - 1, y_pos - 1, "✓")
+            elif tiene_excusa:
+                p.setFont("Helvetica-Bold", 8.5)
+                p.setFillColor(colors.HexColor("#E65100")) # Naranja fuerte para Excusa
+                p.drawString(x_check + 1, y_pos, "E")
 
         # Total
         p.setFont("Helvetica-Bold", 9.5)
@@ -293,8 +318,8 @@ def generar_pdf_asistencia_oficial(grado_nombre, profesor_nombre, registros_mes,
     buffer.seek(0)
     return buffer
 
-# GENERACIÓN EXCEL
-def generar_excel_asistencia_oficial(grado_nombre, profesor_nombre, registros_mes, estudiantes_lista, mes_nombre, sede_nombre=SEDE_DEFECTO):
+# GENERACIÓN EXCEL CON EXCUSA (E)
+def generar_excel_asistencia_oficial(grado_nombre, profesor_nombre, registros_mes, excusas_mes, estudiantes_lista, mes_nombre, sede_nombre=SEDE_DEFECTO):
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Control Asistencia"
@@ -323,6 +348,16 @@ def generar_excel_asistencia_oficial(grado_nombre, profesor_nombre, registros_me
         top=Side(style='thin', color='B0BEC5'),
         bottom=Side(style='thin', color='B0BEC5')
     )
+
+    set_excusas = set()
+    for exc in excusas_mes:
+        try:
+            e_id = exc["estudiante_id"]
+            f_str = exc["fecha"]
+            dia_num = int(f_str.split("-")[2])
+            set_excusas.add((e_id, dia_num))
+        except Exception:
+            pass
 
     ws.merge_cells("A1:AH1")
     ws["A1"] = "REPÚBLICA DE COLOMBIA"
@@ -392,12 +427,21 @@ def generar_excel_asistencia_oficial(grado_nombre, profesor_nombre, registros_me
         for dia in range(1, 32):
             col_idx = dia + 2
             asistio = any(r["estudiante_id"] == est["id"] and int(r["fecha"].split("-")[2]) == dia for r in registros_mes)
-            val = "✓" if asistio else ""
+            tiene_excusa = (est["id"], dia) in set_excusas
+            
             if asistio:
+                val = "✓"
+                color_txt = "2E7D32"
                 asistencias_total += 1
+            elif tiene_excusa:
+                val = "E"
+                color_txt = "E65100"
+            else:
+                val = ""
+                color_txt = "000000"
 
             cell_d = ws.cell(row=row_start, column=col_idx, value=val)
-            cell_d.font = Font(name="Calibri", size=10, bold=True, color="2E7D32")
+            cell_d.font = Font(name="Calibri", size=10, bold=True, color=color_txt)
             cell_d.alignment = align_center
             cell_d.border = thin_border
 
@@ -415,7 +459,7 @@ def generar_excel_asistencia_oficial(grado_nombre, profesor_nombre, registros_me
         row_start += 1
 
     ws.cell(row=30, column=1, value=f"DOCENTE: {profesor_nombre.upper()}").font = font_subtitulos
-    ws.cell(row=32, column=1, value="Documento Oficial - Uso Académico").font = Font(name="Calibri", size=8, italic=True)
+    ws.cell(row=32, column=1, value="Documento Oficial - Uso Académico (✓ = Asistencia, E = Excusa)").font = Font(name="Calibri", size=8, italic=True)
 
     ws.column_dimensions['A'].width = 30
     ws.column_dimensions['B'].width = 12
@@ -597,11 +641,12 @@ else:
     st.title(f"📋 Asistente Educativo — {grado_sel_nombre if grado_sel_nombre else 'Crea un curso'}")
 
     if grado_sel_id:
-        t_docs, t_asistencia, t_notas, t_convivencia, t_lideres = st.tabs([
+        t_docs, t_asistencia, t_estadisticas, t_notas, t_convivencia, t_lideres = st.tabs([
             "📄 Documentos Institucionales",
             "📋 Registro de Asistencia", 
+            "📊 Resumen Estadístico Mensual",
             "📝 Calificaciones",
-            "⚖️ Convivencia",
+            "⚖️ Observador de Convivencia",
             "🏆 Tabla de Líderes"
         ])
 
@@ -696,6 +741,7 @@ else:
             if estudiantes:
                 mes_actual_nombre = MESES_ESPANOL[fecha_gestion.month - 1]
                 res_reg = supabase.table("registros").select("*").eq("grado_id", grado_sel_id).execute()
+                excusas_list = obtener_excusas_mes(prof["id"], grado_sel_id)
                 
                 col_ex1, col_ex2 = st.columns(2)
                 with col_ex1:
@@ -703,12 +749,13 @@ else:
                         grado_nombre=grado_sel_nombre,
                         profesor_nombre=prof['nombre'],
                         registros_mes=res_reg.data or [],
+                        excusas_mes=excusas_list,
                         estudiantes_lista=estudiantes,
                         mes_nombre=mes_actual_nombre,
                         sede_nombre=SEDE_DEFECTO
                     )
                     st.download_button(
-                        label="📄 Exportar Planilla Oficial en PDF (Formato Imagen)",
+                        label="📄 Exportar Planilla Oficial en PDF (Con ✓ y E)",
                         data=pdf_bytes,
                         file_name=f"Planilla_Oficial_Asistencia_{grado_sel_nombre}_{mes_actual_nombre}_2026.pdf",
                         mime="application/pdf",
@@ -720,6 +767,7 @@ else:
                         grado_nombre=grado_sel_nombre,
                         profesor_nombre=prof['nombre'],
                         registros_mes=res_reg.data or [],
+                        excusas_mes=excusas_list,
                         estudiantes_lista=estudiantes,
                         mes_nombre=mes_actual_nombre,
                         sede_nombre=SEDE_DEFECTO
@@ -768,11 +816,11 @@ else:
                 if estudiantes:
                     dict_e_ex = {e["nombre"]: e["id"] for e in estudiantes}
                     est_excusa_nom = st.selectbox("Selecciona Estudiante para Excusa:", list(dict_e_ex.keys()))
-                    motivo_excusa = st.text_area("Motivo o detalle de la excusa médica/permiso:", placeholder="Ej. Permiso médico presentado por el acudiente.")
-                    if st.button("💾 Guardar Excusa en el Observador", use_container_width=True):
+                    motivo_excusa = st.text_area("Motivo o detalle de la excusa médica/permiso:", placeholder="Ej. Presenta excusa médica por cuadro febril.")
+                    if st.button("💾 Guardar Excusa (Aparecerá como 'E' en el PDF)", use_container_width=True):
                         if motivo_excusa.strip():
                             guardar_excusa(dict_e_ex[est_excusa_nom], fecha_sel_str, motivo_excusa.strip(), prof["id"])
-                            st.success(f"Excusa registrada correctamente en el observador de {est_excusa_nom}.")
+                            st.success(f"Excusa registrada correctamente para {est_excusa_nom}.")
                             st.rerun()
 
             # REGISTRO DE DÍAS NO LECTIVOS
@@ -799,7 +847,48 @@ else:
                             else:
                                 st.caption("Sin teléfono")
 
-        # 3. CALIFICACIONES
+        # 3. RESUMEN ESTADÍSTICO MENSUAL POR GRADO
+        with t_estadisticas:
+            st.subheader(f"📊 Estadísticas Mensuales de Asistencia — {grado_sel_nombre}")
+            estudiantes = obtener_estudiantes(grado_sel_id, prof["id"])
+            
+            if not estudiantes:
+                st.info("Agrega estudiantes para visualizar métricas.")
+            else:
+                res_reg = supabase.table("registros").select("*").eq("grado_id", grado_sel_id).execute()
+                data_reg = res_reg.data or []
+                excusas_list = obtener_excusas_mes(prof["id"], grado_sel_id)
+                
+                tot_asistencias_mes = len(data_reg)
+                tot_excusas_mes = len(excusas_list)
+                
+                # Métrica Global
+                col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+                with col_m1:
+                    st.metric("👥 Estudiantes Activos", len(estudiantes))
+                with col_m2:
+                    st.metric("✅ Asistencias Totales", tot_asistencias_mes)
+                with col_m3:
+                    st.metric("📝 Excusas Registradas", tot_excusas_mes)
+                with col_m4:
+                    prom_puntos = int(sum(e.get("puntos", 0) for e in estudiantes) / len(estudiantes)) if estudiantes else 0
+                    st.metric("⭐ Promedio Puntos", prom_puntos)
+
+                st.markdown("---")
+                
+                # GRÁFICO DE EVOLUCIÓN DE ASISTENCIA POR DÍA
+                if data_reg:
+                    df_reg = pd.DataFrame(data_reg)
+                    df_reg["fecha"] = pd.to_datetime(df_reg["fecha"])
+                    df_conteo = df_reg.groupby("fecha").size().reset_index(name="Asistentes")
+                    df_conteo["Día"] = df_conteo["fecha"].dt.strftime("%d-%b")
+                    
+                    st.write("**📈 Tendencia Diaria de Asistencia:**")
+                    st.line_chart(df_conteo.set_index("Día")["Asistentes"], use_container_width=True)
+                else:
+                    st.info("Aún no existen registros de asistencia suficientes para generar gráficos este mes.")
+
+        # 4. CALIFICACIONES
         with t_notas:
             st.subheader("📝 Registro de Calificaciones")
             estudiantes = obtener_estudiantes(grado_sel_id, prof["id"])
@@ -838,7 +927,7 @@ else:
                     ])
                     st.dataframe(df_notas, use_container_width=True)
 
-        # 4. CONVIVENCIA
+        # 5. OBSERVADOR DE CONVIVENCIA CON FILTROS AVANZADOS
         with t_convivencia:
             st.subheader("⚖️ Observador del Estudiante / Convivencia")
             estudiantes = obtener_estudiantes(grado_sel_id, prof["id"])
@@ -865,16 +954,39 @@ else:
                         st.rerun()
 
                 st.markdown("---")
+                st.write("### 🔍 Consulta de Observaciones y Excusas (Filtros Rápido)")
+                
                 res_conv = supabase.table("convivencia").select("*").eq("profesor_id", prof["id"]).execute()
                 if res_conv.data:
                     id_to_name = {e["id"]: e["nombre"] for e in estudiantes}
+                    
                     df_c = pd.DataFrame([
-                        {"Fecha": c["fecha"], "Estudiante": id_to_name.get(c["estudiante_id"], "N/A"), "Tipo": c["tipo"], "Anotación": c["descripcion"]}
+                        {
+                            "Fecha": c["fecha"], 
+                            "Estudiante": id_to_name.get(c["estudiante_id"], "Otro Curso"), 
+                            "Tipo": c["tipo"], 
+                            "Anotación": c["descripcion"]
+                        }
                         for c in res_conv.data if c["estudiante_id"] in id_to_name
                     ])
-                    st.dataframe(df_c, use_container_width=True)
+                    
+                    col_f1, col_f2 = st.columns(2)
+                    with col_f1:
+                        filtro_est = st.selectbox("Filtrar por Estudiante:", ["Todos los estudiantes"] + list(dict_e.keys()))
+                    with col_f2:
+                        filtro_tipo = st.selectbox("Filtrar por Tipo de Anotación:", ["Todos los tipos", "Positivo / Reconocimiento", "Llamado de atención", "Falta grave", "Excusa / Justificación"])
 
-        # 5. TABLA DE LÍDERES
+                    # Aplicar filtros
+                    if filtro_est != "Todos los estudiantes":
+                        df_c = df_c[df_c["Estudiante"] == filtro_est]
+                    if filtro_tipo != "Todos los tipos":
+                        df_c = df_c[df_c["Tipo"] == filtro_tipo]
+
+                    st.dataframe(df_c, use_container_width=True)
+                else:
+                    st.info("Aún no hay anotaciones en el observador.")
+
+        # 6. TABLA DE LÍDERES
         with t_lideres:
             st.subheader("🏆 Clasificación General por Puntos y Rachas")
             estudiantes = obtener_estudiantes(grado_sel_id, prof["id"])
