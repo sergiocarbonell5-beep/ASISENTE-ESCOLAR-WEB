@@ -1,9 +1,15 @@
 # -*- coding: utf-8 -*-
 """
-SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA (PDF FIDELIDAD 100% SOBRE PLANTILLA IMAGEN)
+SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA (VERSION COMPLETA UNIFICADA)
 =======================================================================================
-Funcionalidades: PDF con asistencias (✓) y excusas (E), Excel, Estadísticas Mensuales,
-Filtros en Observador, Alertas de WhatsApp y Gestión Multidocente.
+Funcionalidades:
+- PDF sobre plantilla oficial con asistencias (✓) y excusas (E) perfectamente calibradas.
+- Exportación en Excel oficial (.xlsx).
+- Dashboard Estadístico Completo (% Asistencia, Días Lectivos, Alerta Inasistencias, Promedio Notas).
+- Selector libre de fecha para marcar/quitar asistencias y registrar excusas médicas/permisos.
+- Repositorio de Documentos Institucionales por materia.
+- Registro de Calificaciones, Observador de Convivencia con filtros y Tabla de Líderes (Gamer).
+- Notificaciones directas a acudientes por WhatsApp.
 """
 
 import os
@@ -300,7 +306,7 @@ def generar_pdf_asistencia_oficial(grado_nombre, profesor_nombre, registros_mes,
                 p.drawString(x_check - 1, y_pos - 1, "✓")
             elif tiene_excusa:
                 p.setFont("Helvetica-Bold", 8.5)
-                p.setFillColor(colors.HexColor("#E65100")) # Naranja fuerte para Excusa
+                p.setFillColor(colors.HexColor("#E65100"))
                 p.drawString(x_check + 1, y_pos, "E")
 
         # Total
@@ -847,46 +853,89 @@ else:
                             else:
                                 st.caption("Sin teléfono")
 
-        # 3. RESUMEN ESTADÍSTICO MENSUAL POR GRADO
+        # 3. RESUMEN ESTADÍSTICO MENSUAL POR GRADO (DASHBOARD POTENCIADO)
         with t_estadisticas:
-            st.subheader(f"📊 Estadísticas Mensuales de Asistencia — {grado_sel_nombre}")
+            st.subheader(f"📊 Dashboard Estadístico y Métricas Mensuales — {grado_sel_nombre}")
             estudiantes = obtener_estudiantes(grado_sel_id, prof["id"])
             
             if not estudiantes:
-                st.info("Agrega estudiantes para visualizar métricas.")
+                st.info("Agrega estudiantes para visualizar el dashboard estadístico.")
             else:
                 res_reg = supabase.table("registros").select("*").eq("grado_id", grado_sel_id).execute()
                 data_reg = res_reg.data or []
                 excusas_list = obtener_excusas_mes(prof["id"], grado_sel_id)
                 
+                tot_estudiantes = len(estudiantes)
                 tot_asistencias_mes = len(data_reg)
                 tot_excusas_mes = len(excusas_list)
                 
-                # Métrica Global
-                col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-                with col_m1:
-                    st.metric("👥 Estudiantes Activos", len(estudiantes))
-                with col_m2:
-                    st.metric("✅ Asistencias Totales", tot_asistencias_mes)
-                with col_m3:
-                    st.metric("📝 Excusas Registradas", tot_excusas_mes)
-                with col_m4:
-                    prom_puntos = int(sum(e.get("puntos", 0) for e in estudiantes) / len(estudiantes)) if estudiantes else 0
-                    st.metric("⭐ Promedio Puntos", prom_puntos)
+                # Cálculo de Días Únicos Registrados
+                fechas_registradas = set(r["fecha"] for r in data_reg) if data_reg else set()
+                dias_clase_contados = max(len(fechas_registradas), 1)
+                
+                asistencias_esperadas = tot_estudiantes * dias_clase_contados
+                pct_asistencia = round((tot_asistencias_mes / asistencias_esperadas) * 100, 1) if asistencias_esperadas > 0 else 0
+                
+                # FILA 1: MÉTRICAS CLAVE
+                m1, m2, m3, m4, m5 = st.columns(5)
+                with m1:
+                    st.metric("👥 Estudiantes Activos", tot_estudiantes)
+                with m2:
+                    st.metric("📅 Días Lectivos Registrados", dias_clase_contados)
+                with m3:
+                    st.metric("✅ % Asistencia del Mes", f"{pct_asistencia}%", delta=f"{pct_asistencia - 80:.1f}% vs Meta 80%")
+                with m4:
+                    st.metric("📝 Excusas Justificadas", tot_excusas_mes)
+                with m5:
+                    prom_puntos = int(sum(e.get("puntos", 0) for e in estudiantes) / tot_estudiantes) if tot_estudiantes else 0
+                    st.metric("⭐ Puntos Promedio", prom_puntos)
 
                 st.markdown("---")
                 
-                # GRÁFICO DE EVOLUCIÓN DE ASISTENCIA POR DÍA
-                if data_reg:
-                    df_reg = pd.DataFrame(data_reg)
-                    df_reg["fecha"] = pd.to_datetime(df_reg["fecha"])
-                    df_conteo = df_reg.groupby("fecha").size().reset_index(name="Asistentes")
-                    df_conteo["Día"] = df_conteo["fecha"].dt.strftime("%d-%b")
+                # FILA 2: GRÁFICOS Y ANÁLISIS
+                g1, g2 = st.columns([1.8, 1.2])
+                
+                with g1:
+                    st.write("**📈 Distribución Diaria de Asistencia (Día por Día):**")
+                    if data_reg:
+                        df_reg = pd.DataFrame(data_reg)
+                        df_reg["fecha_dt"] = pd.to_datetime(df_reg["fecha"])
+                        df_diario = df_reg.groupby(df_reg["fecha_dt"].dt.strftime("%d-%b")).size().reset_index(name="Asistencias")
+                        st.bar_chart(df_diario.set_index("fecha_dt")["Asistencias"], use_container_width=True)
+                    else:
+                        st.info("Aún no hay asistencias tomadas este mes para graficar la tendencia diaria.")
+
+                with g2:
+                    st.write("**🏆 Alumno Destacado y Alertas:**")
+                    conteo_ind = {}
+                    for r in data_reg:
+                        eid = r["estudiante_id"]
+                        conteo_ind[eid] = conteo_ind.get(eid, 0) + 1
                     
-                    st.write("**📈 Tendencia Diaria de Asistencia:**")
-                    st.line_chart(df_conteo.set_index("Día")["Asistentes"], use_container_width=True)
+                    id_a_nombre = {e["id"]: e["nombre"] for e in estudiantes}
+                    
+                    if conteo_ind:
+                        top_id = max(conteo_ind, key=conteo_ind.get)
+                        st.success(f"🥇 **Mayor Asistencia:** {id_a_nombre.get(top_id, 'N/A')} ({conteo_ind[top_id]} asistencias)")
+                    
+                    baja_asist = [e["nombre"] for e in estudiantes if conteo_ind.get(e["id"], 0) < (dias_clase_contados * 0.7)]
+                    if baja_asist:
+                        st.warning(f"⚠️ **Alerta Inasistencia (>30% faltas):**\n" + "\n".join([f"• {nom}" for nom in baja_asist]))
+                    else:
+                        st.info("🎉 ¡Excelente! Ningún estudiante presenta faltas críticas.")
+
+                st.markdown("---")
+                
+                # FILA 3: PROMEDIO POR MATERIA (ACADÉMICO)
+                st.write("**📊 Promedio General de Calificaciones por Asignatura:**")
+                res_notas = supabase.table("calificaciones").select("materia, nota").eq("profesor_id", prof["id"]).execute()
+                if res_notas.data:
+                    df_notas_g = pd.DataFrame(res_notas.data)
+                    df_prom_mat = df_notas_g.groupby("materia")["nota"].mean().reset_index()
+                    df_prom_mat["nota"] = df_prom_mat["nota"].round(2)
+                    st.bar_chart(df_prom_mat.set_index("materia")["nota"], use_container_width=True)
                 else:
-                    st.info("Aún no existen registros de asistencia suficientes para generar gráficos este mes.")
+                    st.caption("Ingresa calificaciones en la pestaña 'Calificaciones' para visualizar los promedios por materia.")
 
         # 4. CALIFICACIONES
         with t_notas:
@@ -976,7 +1025,6 @@ else:
                     with col_f2:
                         filtro_tipo = st.selectbox("Filtrar por Tipo de Anotación:", ["Todos los tipos", "Positivo / Reconocimiento", "Llamado de atención", "Falta grave", "Excusa / Justificación"])
 
-                    # Aplicar filtros
                     if filtro_est != "Todos los estudiantes":
                         df_c = df_c[df_c["Estudiante"] == filtro_est]
                     if filtro_tipo != "Todos los tipos":
