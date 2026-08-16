@@ -2,8 +2,8 @@
 """
 SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA (PDF FIDELIDAD 100% SOBRE PLANTILLA IMAGEN)
 =======================================================================================
-Funcionalidades: PDF montado sobre imagen oficial, Excel, Días Hábiles (Lunes a Viernes),
-Días No Lectivos, Alertas de WhatsApp y Gestión Multidocente.
+Funcionalidades: PDF sobre plantilla oficial, Excel, Gestión de Excusas/Novedades,
+Edición Manual de Asistencia, Alertas de WhatsApp y Gestión Multidocente.
 """
 
 import os
@@ -138,9 +138,12 @@ def editar_estudiante(estudiante_id, nuevo_nombre, nuevo_telefono):
 def eliminar_estudiante(estudiante_id):
     supabase.table("estudiantes").update({"activo": 0}).eq("id", estudiante_id).execute()
 
-def ya_registrado_hoy(estudiante_id, fecha):
-    res = supabase.table("registros").select("id").eq("estudiante_id", estudiante_id).eq("fecha", fecha).execute()
+def ya_registrado_fecha(estudiante_id, fecha_str):
+    res = supabase.table("registros").select("id").eq("estudiante_id", estudiante_id).eq("fecha", fecha_str).execute()
     return len(res.data) > 0
+
+def eliminar_asistencia_fecha(estudiante_id, fecha_str):
+    supabase.table("registros").delete().eq("estudiante_id", estudiante_id).eq("fecha", fecha_str).execute()
 
 def es_dia_no_lectivo(fecha_str, grado_id, profesor_id):
     try:
@@ -161,34 +164,30 @@ def registrar_dia_no_lectivo(fecha_str, motivo, grado_id, profesor_id):
     except Exception:
         return False
 
-# REGISTRO DE ASISTENCIA
-def registrar_asistencia(estudiante, grado_id, profesor_id):
-    hoy = datetime.date.today().isoformat()
+# REGISTRO Y MODIFICACIÓN DE ASISTENCIA
+def registrar_asistencia_manual(estudiante, fecha_str, grado_id, profesor_id):
     hora_str = datetime.datetime.now().strftime("%H:%M:%S")
     
-    if ya_registrado_hoy(estudiante["id"], hoy):
+    if ya_registrado_fecha(estudiante["id"], fecha_str):
         return None
 
-    res_hoy = supabase.table("registros").select("id", count="exact").eq("fecha", hoy).eq("grado_id", grado_id).execute()
+    res_hoy = supabase.table("registros").select("id", count="exact").eq("fecha", fecha_str).eq("grado_id", grado_id).execute()
     orden = (res_hoy.count or 0) + 1
     
     puntos_extra = PUNTOS_EXTRA_PUNTUALIDAD if orden <= CUPOS_PUNTUALIDAD else 0
     puntos_totales = PUNTOS_BASE + puntos_extra
     
-    ayer = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
-    nueva_racha = estudiante["racha"] + 1 if estudiante["ultima_fecha"] == ayer else 1
     nuevos_puntos = estudiante["puntos"] + puntos_totales
     
     supabase.table("estudiantes").update({
         "puntos": nuevos_puntos, 
-        "racha": nueva_racha, 
-        "ultima_fecha": hoy,
+        "ultima_fecha": fecha_str,
         "total_asistencias": estudiante.get("total_asistencias", 0) + 1
     }).eq("id", estudiante["id"]).execute()
 
     supabase.table("registros").insert({
         "estudiante_id": estudiante["id"], 
-        "fecha": hoy, 
+        "fecha": fecha_str, 
         "hora": hora_str,
         "puntos_obtenidos": puntos_totales, 
         "orden_llegada": orden,
@@ -199,10 +198,18 @@ def registrar_asistencia(estudiante, grado_id, profesor_id):
     return {
         "nombre": estudiante["nombre"], 
         "puntos_ganados": puntos_totales,
-        "puntos_extra": puntos_extra, 
         "puntos_totales": nuevos_puntos, 
-        "racha": nueva_racha
+        "racha": estudiante["racha"]
     }
+
+def guardar_excusa(estudiante_id, fecha_str, motivo, profesor_id):
+    supabase.table("convivencia").insert({
+        "estudiante_id": estudiante_id,
+        "fecha": fecha_str,
+        "tipo": "Excusa / Justificación",
+        "descripcion": f"EXCUSA DE ASISTENCIA: {motivo}",
+        "profesor_id": profesor_id
+    }).execute()
 
 def crear_link_whatsapp(telefono, nombre_estudiante, nombre_profesor):
     if not telefono:
@@ -216,7 +223,7 @@ def crear_link_whatsapp(telefono, nombre_estudiante, nombre_profesor):
     return f"https://wa.me/{num_limpio}?text={msg_encoded}"
 
 # ================================================================
-# GENERACIÓN DE PDF EXACTO SOBRE PLANTILLA DE IMAGEN (CALIBRADO)
+# GENERACIÓN DE PDF EXACTO SOBRE PLANTILLA DE IMAGEN
 # ================================================================
 def generar_pdf_asistencia_oficial(grado_nombre, profesor_nombre, registros_mes, estudiantes_lista, mes_nombre, sede_nombre=SEDE_DEFECTO):
     buffer = io.BytesIO()
@@ -244,23 +251,23 @@ def generar_pdf_asistencia_oficial(grado_nombre, profesor_nombre, registros_mes,
     w_dia = 13.5          # Ancho horizontal entre círculos
     x_total = 560         # Columna TOTAL
 
-    y_fila_inicio = 328   # BAJADO: Comienza en el primer renglón con círculos (debajo de la barra crema)
+    y_fila_inicio = 328   # Comienza exactamente en el primer renglón con círculos
     h_fila = 19.1         # Distancia vertical exacta entre renglones
 
     for idx, est in enumerate(estudiantes_lista[:12]):
         y_pos = y_fila_inicio - (idx * h_fila)
         
-        # Nombre del Alumno (Limitado para no invadir la casilla GRADO)
+        # Nombre del Alumno
         p.setFont("Helvetica-Bold", 6.8)
         p.setFillColor(colors.HexColor("#111827"))
         p.drawString(x_alumnos, y_pos, str(est["nombre"])[:18])
 
-        # Grado (Perfectamente encajado en su casilla)
+        # Grado
         p.setFont("Helvetica-Bold", 6.8)
         p.setFillColor(colors.HexColor("#374151"))
         p.drawString(x_grado, y_pos, str(grado_nombre)[:6])
 
-        # Asistencias por día (✓ Verde Institucional centrado en cada círculo)
+        # Asistencias por día (✓ Verde Institucional centrado)
         tot_asist = 0
         for d in range(1, 32):
             asistio = any(r["estudiante_id"] == est["id"] and int(r["fecha"].split("-")[2]) == d for r in registros_mes)
@@ -271,7 +278,7 @@ def generar_pdf_asistencia_oficial(grado_nombre, profesor_nombre, registros_mes,
                 p.setFillColor(colors.HexColor("#1B5E20"))
                 p.drawString(x_check - 1, y_pos - 1, "✓")
 
-        # Total (Negro Bold 9.5pt)
+        # Total
         p.setFont("Helvetica-Bold", 9.5)
         p.setFillColor(colors.HexColor("#111827"))
         p.drawString(x_total, y_pos, str(tot_asist))
@@ -423,7 +430,7 @@ def generar_excel_asistencia_oficial(grado_nombre, profesor_nombre, registros_me
     return output
 
 # ================================================================
-# VENTANA CELEBRACIÓN CON SALUDO DE MAÑANA Y AUDIO INSTANTÁNEO
+# VENTANA CELEBRACIÓN CON AUDIO
 # ================================================================
 @st.dialog("🎉 ¡Asistencia Registrada!", width="large")
 def ventana_celebracion(res):
@@ -636,60 +643,58 @@ else:
                         bytes_dec = base64.b64decode(doc['contenido_b64'])
                         st.download_button("⬇️ Descargar", data=bytes_dec, file_name=doc['nombre'], use_container_width=True)
 
-        # 2. REGISTRO DE ASISTENCIA CON DÍAS HÁBILES Y FORMATO PDF/EXCEL
+        # 2. REGISTRO Y EDICIÓN DE ASISTENCIA MULTIFUNCIÓN
         with t_asistencia:
             estudiantes = obtener_estudiantes(grado_sel_id, prof["id"])
-            hoy_dt = datetime.date.today()
-            hoy_str = hoy_dt.isoformat()
-            dia_semana = hoy_dt.weekday()
-            es_fin_semana = dia_semana >= 5
             
-            registro_no_lectivo = es_dia_no_lectivo(hoy_str, grado_sel_id, prof["id"])
+            col_f1, col_f2 = st.columns([1, 2])
+            with col_f1:
+                fecha_gestion = st.date_input("📅 Selecciona Fecha a Gestionar:", datetime.date.today())
+                fecha_sel_str = fecha_gestion.isoformat()
             
+            with col_f2:
+                es_fin = fecha_gestion.weekday() >= 5
+                reg_no_lect = es_dia_no_lectivo(fecha_sel_str, grado_sel_id, prof["id"])
+                if es_fin:
+                    st.caption("ℹ️ *Fecha seleccionada corresponde a Fin de Semana.*")
+                if reg_no_lect:
+                    st.warning(f"⚠️ Día No Lectivo: {reg_no_lect['motivo']}")
+
+            # RESUMEN RÁPIDO
             total_est = len(estudiantes) if estudiantes else 0
             asistieron_count = 0
             estudiantes_ausentes = []
             
             if estudiantes:
                 for est in estudiantes:
-                    if ya_registrado_hoy(est["id"], hoy_str):
+                    if ya_registrado_fecha(est["id"], fecha_sel_str):
                         asistieron_count += 1
                     else:
                         estudiantes_ausentes.append(est)
             
             faltaron_count = total_est - asistieron_count
 
-            col_titulo, col_resumen = st.columns([1.6, 1])
-            
-            with col_titulo:
-                st.subheader("Marcar Asistencia Diaria")
-                st.caption(f"📅 Fecha actual: {hoy_str} ({'Fin de Semana - Sin Clases' if es_fin_semana else 'Día Hábil'})")
-            
-            with col_resumen:
-                if total_est > 0:
-                    c_red, c_green = st.columns(2)
-                    with c_red:
-                        st.markdown(f"""
-                            <div style="background-color: #FFEBEE; border: 2px solid #EF5350; border-radius: 12px; padding: 8px 12px; text-align: center;">
-                                <span style="color: #C62828; font-weight: bold; font-size: 13px;">✖ Faltaron</span><br>
-                                <span style="color: #C62828; font-size: 26px; font-weight: bold;">{faltaron_count}</span><br>
-                                <span style="color: #B71C1C; font-size: 11px;">{'estudiante' if faltaron_count == 1 else 'estudiantes'}</span>
-                            </div>
-                        """, unsafe_allow_html=True)
-                    with c_green:
-                        st.markdown(f"""
-                            <div style="background-color: #E8F5E9; border: 2px solid #66BB6A; border-radius: 12px; padding: 8px 12px; text-align: center;">
-                                <span style="color: #2E7D32; font-weight: bold; font-size: 13px;">✅ Asistieron</span><br>
-                                <span style="color: #2E7D32; font-size: 26px; font-weight: bold;">{asistieron_count}</span><br>
-                                <span style="color: #1B5E20; font-size: 11px;">{'estudiante' if asistieron_count == 1 else 'estudiantes'}</span>
-                            </div>
-                        """, unsafe_allow_html=True)
+            c_red, c_green = st.columns(2)
+            with c_red:
+                st.markdown(f"""
+                    <div style="background-color: #FFEBEE; border: 2px solid #EF5350; border-radius: 12px; padding: 8px 12px; text-align: center;">
+                        <span style="color: #C62828; font-weight: bold; font-size: 13px;">✖ Faltaron / Sin Registro</span><br>
+                        <span style="color: #C62828; font-size: 26px; font-weight: bold;">{faltaron_count}</span>
+                    </div>
+                """, unsafe_allow_html=True)
+            with c_green:
+                st.markdown(f"""
+                    <div style="background-color: #E8F5E9; border: 2px solid #66BB6A; border-radius: 12px; padding: 8px 12px; text-align: center;">
+                        <span style="color: #2E7D32; font-weight: bold; font-size: 13px;">✅ Asistieron</span><br>
+                        <span style="color: #2E7D32; font-size: 26px; font-weight: bold;">{asistieron_count}</span>
+                    </div>
+                """, unsafe_allow_html=True)
 
             st.write("")
 
-            # BOTONES DE EXPORTACIÓN
+            # EXPORTACIÓN
             if estudiantes:
-                mes_actual_nombre = MESES_ESPANOL[hoy_dt.month - 1]
+                mes_actual_nombre = MESES_ESPANOL[fecha_gestion.month - 1]
                 res_reg = supabase.table("registros").select("*").eq("grado_id", grado_sel_id).execute()
                 
                 col_ex1, col_ex2 = st.columns(2)
@@ -729,62 +734,70 @@ else:
 
             st.markdown("---")
 
-            # REGISTRO DE DÍAS NO LECTIVOS / SIN CLASE
-            with st.expander("🚫 Registrar Día Sin Clase (Festivo, Paro, Jornada Pedagógica)", expanded=False):
-                if registro_no_lectivo:
-                    st.warning(f"⚠️ El día de hoy ({hoy_str}) fue registrado como DÍA SIN CLASE: **{registro_no_lectivo['motivo']}**")
-                else:
-                    motivo_txt = st.text_input("Motivo de la suspensión de clases:", placeholder="Ej. Jornada Pedagógica de Docentes / Clima")
-                    if st.button("📌 Declarar Día Sin Clase"):
-                        if motivo_txt.strip():
-                            if registrar_dia_no_lectivo(hoy_str, motivo_txt.strip(), grado_sel_id, prof["id"]):
-                                st.success("Día registrado como no lectivo. No afectará las asistencias.")
-                                st.rerun()
-
-            st.markdown("---")
-
-            # NOTIFICACIONES A AUSENTES POR WHATSAPP
-            if estudiantes_ausentes and not es_fin_semana and not registro_no_lectivo:
-                with st.expander("📲 Notificar ausencias a Acudientes por WhatsApp", expanded=False):
-                    st.caption("Haz clic en el botón al lado de cada estudiante faltante para abrir su chat con la notificación lista:")
-                    for aus in estudiantes_ausentes:
-                        tel = aus.get("telefono_acudiente")
-                        c_a1, c_a2 = st.columns([2, 1])
-                        with c_a1:
-                            st.write(f"🔴 **{aus['nombre']}** - Tel: `{tel if tel else 'Sin registrar'}`")
-                        with c_a2:
-                            link_wa = crear_link_whatsapp(tel, aus['nombre'], prof['nombre'])
-                            if link_wa:
-                                st.link_button("📲 Enviar WhatsApp", link_wa, use_container_width=True)
-                            else:
-                                st.button("⚠️ Falta Teléfono", disabled=True, key=f"no_tel_{aus['id']}", use_container_width=True)
-
-            # CONTROL DE ASISTENCIA DIARIA (LUNES A VIERNES)
-            if es_fin_semana:
-                st.info("🌴 Hoy es fin de semana (Sábado/Domingo). El registro de asistencia no está activo.")
-            elif registro_no_lectivo:
-                st.info(f"🚫 Día declarado sin actividades escolares por: **{registro_no_lectivo['motivo']}**.")
-            elif not estudiantes:
-                st.info("No hay alumnos registrados en este curso. Agrégalos desde la barra lateral.")
+            # LISTA Y CONTROL DIRECTO DE ASISTENCIA
+            st.subheader(f"📋 Lista de Asistencia — {fecha_sel_str}")
+            if not estudiantes:
+                st.info("No hay alumnos registrados en este curso.")
             else:
                 cols = st.columns(3)
                 for i, est in enumerate(estudiantes):
-                    registrado = ya_registrado_hoy(est["id"], hoy_str)
+                    registrado = ya_registrado_fecha(est["id"], fecha_sel_str)
                     col = cols[i % 3]
                     with col:
                         with st.container(border=True):
                             if registrado:
                                 st.success(f"✅ {est['nombre']}")
-                                st.caption(f"Puntos: {est['puntos']} | Racha: 🔥 {est['racha']} días")
-                                st.button("Registrado", key=f"btn_{est['id']}", disabled=True)
+                                if st.button("❌ Quitar Asistencia", key=f"del_{est['id']}_{fecha_sel_str}", use_container_width=True):
+                                    eliminar_asistencia_fecha(est["id"], fecha_sel_str)
+                                    st.toast(f"Asistencia removida para {est['nombre']}")
+                                    st.rerun()
                             else:
                                 st.markdown(f"**👤 {est['nombre']}**")
-                                st.caption(f"Puntos: {est['puntos']} | Racha: 🔥 {est['racha']} días")
-                                if st.button("✋ Marcar Asistencia", key=f"btn_{est['id']}"):
-                                    res = registrar_asistencia(est, grado_sel_id, prof["id"])
-                                    if res:
+                                if st.button("✋ Marcar Asistencia", key=f"add_{est['id']}_{fecha_sel_str}", use_container_width=True):
+                                    res = registrar_asistencia_manual(est, fecha_sel_str, grado_sel_id, prof["id"])
+                                    if res and fecha_sel_str == datetime.date.today().isoformat():
                                         st.balloons()
                                         ventana_celebracion(res)
+                                    else:
+                                        st.rerun()
+
+            st.markdown("---")
+
+            # MÓDULO DE EXCUSAS Y NOVEDADES
+            with st.expander("📝 Registrar Excusa o Justificación de Inasistencia", expanded=False):
+                if estudiantes:
+                    dict_e_ex = {e["nombre"]: e["id"] for e in estudiantes}
+                    est_excusa_nom = st.selectbox("Selecciona Estudiante para Excusa:", list(dict_e_ex.keys()))
+                    motivo_excusa = st.text_area("Motivo o detalle de la excusa médica/permiso:", placeholder="Ej. Permiso médico presentado por el acudiente.")
+                    if st.button("💾 Guardar Excusa en el Observador", use_container_width=True):
+                        if motivo_excusa.strip():
+                            guardar_excusa(dict_e_ex[est_excusa_nom], fecha_sel_str, motivo_excusa.strip(), prof["id"])
+                            st.success(f"Excusa registrada correctamente en el observador de {est_excusa_nom}.")
+                            st.rerun()
+
+            # REGISTRO DE DÍAS NO LECTIVOS
+            with st.expander("🚫 Declarar Fecha como Día Sin Clase (Festivo/Paro/Jornada)", expanded=False):
+                motivo_txt = st.text_input("Motivo de suspensión:", placeholder="Ej. Jornada Pedagógica")
+                if st.button("📌 Guardar Día Sin Clase"):
+                    if motivo_txt.strip():
+                        registrar_dia_no_lectivo(fecha_sel_str, motivo_txt.strip(), grado_sel_id, prof["id"])
+                        st.success("Día guardado.")
+                        st.rerun()
+
+            # NOTIFICACIONES WHATSAPP
+            if estudiantes_ausentes:
+                with st.expander("📲 Notificar ausencias por WhatsApp", expanded=False):
+                    for aus in estudiantes_ausentes:
+                        tel = aus.get("telefono_acudiente")
+                        c_a1, c_a2 = st.columns([2, 1])
+                        with c_a1:
+                            st.write(f"🔴 **{aus['nombre']}**")
+                        with c_a2:
+                            link_wa = crear_link_whatsapp(tel, aus['nombre'], prof['nombre'])
+                            if link_wa:
+                                st.link_button("📲 WhatsApp", link_wa, use_container_width=True)
+                            else:
+                                st.caption("Sin teléfono")
 
         # 3. CALIFICACIONES
         with t_notas:
@@ -836,7 +849,7 @@ else:
                 with c_c1:
                     est_conv_nom = st.selectbox("Estudiante a registrar:", list(dict_e.keys()))
                 with c_c2:
-                    tipo_conv = st.selectbox("Tipo de anotación:", ["Positivo / Reconocimiento", "Llamado de atención", "Falta grave"])
+                    tipo_conv = st.selectbox("Tipo de anotación:", ["Positivo / Reconocimiento", "Llamado de atención", "Falta grave", "Excusa / Justificación"])
                 
                 desc_conv = st.text_area("Descripción de la situación:")
                 if st.button("📝 Guardar Anotación", use_container_width=True):
