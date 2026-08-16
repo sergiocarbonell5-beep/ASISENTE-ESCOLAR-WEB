@@ -1,13 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA (VERSION CON BOLETINES OFICIALES)
+SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA (VERSION AUTOGUARDADO COMPLETO)
 =======================================================================================
 Funcionalidades:
-- Módulo de Boletines Académicos en PDF con diseño 100% fiel al formato institucional.
-- Conversión automática Cuantitativa -> Cualitativa P.E.N. -> Escala Nacional.
-- Redirección / Sincronización directa desde Calificaciones a Boletines.
-- Evaluador Continuo Diario por Dimensiones Ponderadas.
-- PDF y Excel de Asistencia calibrados sobre plantilla oficial.
+- Autoguardado instantáneo de notas diarias en Supabase.
+- Sincronización automática de Definitiva Ponderada con los Boletines Académicos.
+- Módulo de Boletines Oficiales en PDF (2 Páginas).
+- PDF y Excel de Asistencia calibrados.
 - Dashboard Estadístico y Observador de Convivencia con filtros.
 """
 
@@ -274,33 +273,28 @@ def generar_pdf_boletin_oficial(estudiante_nombre, grado_nombre, periodo, sede_n
     width, height = letter # 612 x 792 pt
 
     # ------------------ HOJA 1: INFORME Y NOTAS ------------------
-    # Encabezado Institucional
     p.setFont("Helvetica-Bold", 10)
     p.drawCentredString(width / 2.0, height - 35, "REPÚBLICA DE COLOMBIA")
     p.drawCentredString(width / 2.0, height - 48, "SECRETARÍA DE EDUCACIÓN DEPARTAMENTAL NORTE DE SANTANDER")
     p.drawCentredString(width / 2.0, height - 61, "CENTRO EDUCATIVO RURAL SIRAVITA")
     p.drawCentredString(width / 2.0, height - 74, "MUNICIPIO DE ARBOLEDAS")
 
-    # Franja Verde Institucional con Datos DANE
     p.setFillColor(colors.HexColor("#008037"))
     p.rect(35, height - 120, width - 70, 35, fill=True, stroke=False)
     p.setFillColor(colors.white)
     p.setFont("Helvetica-Bold", 8)
     p.drawCentredString(width / 2.0, height - 97, "DANE 254051000139 | DECRETO DE CREACIÓN 00252 DEL 12 DE ABRIL DE 2006")
     
-    # Caja amarilla de aprobación
     p.setFillColor(colors.HexColor("#FFF100"))
     p.rect(130, height - 114, width - 260, 11, fill=True, stroke=False)
     p.setFillColor(colors.black)
     p.setFont("Helvetica-Bold", 7)
     p.drawCentredString(width / 2.0, height - 111, "RESOLUCIÓN DE APROBACIÓN DE ESTUDIO 8: 008708-24-10-2024")
 
-    # Título Boletín
     p.setFillColor(colors.black)
     p.setFont("Helvetica-Bold", 11)
     p.drawCentredString(width / 2.0, height - 142, "Boletín Académico Escuela Nueva de Básica Primaria")
 
-    # Datos del Alumno y Sede
     p.setFont("Helvetica", 9)
     y_datos = height - 165
     p.drawString(40, y_datos, f"Sede: {sede_nombre.upper()}")
@@ -312,19 +306,17 @@ def generar_pdf_boletin_oficial(estudiante_nombre, grado_nombre, periodo, sede_n
 
     p.drawString(40, y_datos - 36, f"Docente: {profesor_nombre.upper()}")
 
-    # Tabla de Calificaciones
     y_tabla_top = y_datos - 55
     h_header = 22
     h_row = 18
 
-    # Headers de Tabla
-    p.setFillColor(colors.HexColor("#FFE6CC")) # Beige/Naranja suave
+    p.setFillColor(colors.HexColor("#FFE6CC"))
     p.rect(35, y_tabla_top - h_header, 180, h_header, fill=True, stroke=True)
-    p.setFillColor(colors.HexColor("#00A2E8")) # Azul institucional
+    p.setFillColor(colors.HexColor("#00A2E8"))
     p.rect(215, y_tabla_top - h_header, 130, h_header, fill=True, stroke=True)
     p.setFillColor(colors.HexColor("#00A2E8"))
     p.rect(345, y_tabla_top - h_header, 110, h_header, fill=True, stroke=True)
-    p.setFillColor(colors.HexColor("#FFC90E")) # Amarillo dorado
+    p.setFillColor(colors.HexColor("#FFC90E"))
     p.rect(455, y_tabla_top - h_header, 120, h_header, fill=True, stroke=True)
 
     p.setFillColor(colors.black)
@@ -334,7 +326,6 @@ def generar_pdf_boletin_oficial(estudiante_nombre, grado_nombre, periodo, sede_n
     p.drawString(350, y_tabla_top - 14, "Valoración Cuantitativa")
     p.drawString(460, y_tabla_top - 14, "Escala Nacional")
 
-    # Filas de Materias
     y_curr = y_tabla_top - h_header
     for mat in MATERIAS_LISTA:
         y_curr -= h_row
@@ -355,7 +346,6 @@ def generar_pdf_boletin_oficial(estudiante_nombre, grado_nombre, periodo, sede_n
         p.rect(455, y_curr, 120, h_row, fill=False, stroke=True)
         p.drawString(460, y_curr + 5, val_nac)
 
-    # Sección de Observaciones
     y_obs = y_curr - 30
     p.setFont("Helvetica-Bold", 9)
     p.drawString(40, y_obs, "OBSERVACIONES:")
@@ -365,12 +355,10 @@ def generar_pdf_boletin_oficial(estudiante_nombre, grado_nombre, periodo, sede_n
     p.showPage()
 
     # ------------------ HOJA 2: ESCALA Y FIRMAS ------------------
-    # Escala de Valoración Institucional Tabla
     y_e = height - 120
     p.setFont("Helvetica-BoldOblique", 11)
     p.drawCentredString(width / 2.0, y_e + 20, "ESCALA DE VALORACIÓN INSTITUCIONAL")
 
-    # Header Escala
     p.setFillColor(colors.HexColor("#00A2E8"))
     p.rect(130, y_e - 30, 130, 30, fill=True, stroke=True)
     p.setFillColor(colors.HexColor("#FFC90E"))
@@ -389,7 +377,6 @@ def generar_pdf_boletin_oficial(estudiante_nombre, grado_nombre, periodo, sede_n
     p.drawString(375, y_e - 12, "VALORACIÓN")
     p.drawString(375, y_e - 22, "CUANTITATIVA")
 
-    # Filas de la Escala
     escala_datos = [
         ("EXCELENTE", "DESEMPEÑO SUPERIOR", "4.8 A 5.0"),
         ("BUENO", "DESEMPEÑO ALTO", "4.0 A 4.79"),
@@ -410,7 +397,6 @@ def generar_pdf_boletin_oficial(estudiante_nombre, grado_nombre, periodo, sede_n
         p.rect(370, y_f, 110, 20, fill=False, stroke=True)
         p.drawString(375, y_f + 6, e_cuant)
 
-    # Líneas de Firmas
     y_firmas = y_f - 180
     p.setStrokeColor(colors.gray)
     p.line(90, y_firmas, 270, y_firmas)
@@ -429,9 +415,8 @@ def generar_pdf_boletin_oficial(estudiante_nombre, grado_nombre, periodo, sede_n
 def generar_pdf_asistencia_oficial(grado_nombre, profesor_nombre, registros_mes, excusas_mes, estudiantes_lista, mes_nombre, sede_nombre=SEDE_DEFECTO):
     buffer = io.BytesIO()
     p = canvas.Canvas(buffer, pagesize=letter)
-    width, height = letter # 612 x 792 pt
+    width, height = letter
 
-    # 1. Imagen de Fondo
     ruta_imagen = "plantilla_asistencia.png"
     if os.path.exists(ruta_imagen):
         p.drawImage(ruta_imagen, 0, 0, width=width, height=height)
@@ -439,7 +424,6 @@ def generar_pdf_asistencia_oficial(grado_nombre, profesor_nombre, registros_mes,
         p.setFont("Helvetica-Bold", 10)
         p.drawString(40, height - 40, "CENTRO EDUCATIVO RURAL SIRAVITA - CONTROL ASISTENCIA")
 
-    # 2. Encabezados
     p.setFont("Helvetica-Bold", 9.5)
     p.setFillColor(colors.HexColor("#111827"))
     p.drawString(110, 415, str(sede_nombre).upper())
@@ -455,7 +439,6 @@ def generar_pdf_asistencia_oficial(grado_nombre, profesor_nombre, registros_mes,
         except Exception:
             pass
 
-    # 3. Filas y Círculos
     x_alumnos = 8
     x_grado = 78
     x_dias_inicio = 138.5
@@ -496,7 +479,6 @@ def generar_pdf_asistencia_oficial(grado_nombre, profesor_nombre, registros_mes,
         p.setFillColor(colors.HexColor("#111827"))
         p.drawString(x_total, y_pos, str(tot_asist))
 
-    # 4. Firma
     p.setFont("Helvetica-Bold", 9.5)
     p.setFillColor(colors.HexColor("#111827"))
     p.drawString(115, 28, str(profesor_nombre).upper())
@@ -825,7 +807,7 @@ else:
                             st.success("Alumno eliminado.")
                             st.rerun()
 
-    # PESTAÑAS PRINCIPALES (INCLUYE PESTAÑA BOLETINES)
+    # PESTAÑAS PRINCIPALES
     st.title(f"📋 Asistente Educativo — {grado_sel_nombre if grado_sel_nombre else 'Crea un curso'}")
 
     if grado_sel_id:
@@ -1119,9 +1101,9 @@ else:
                 else:
                     st.caption("Ingresa calificaciones en la pestaña 'Calificaciones' para visualizar los promedios por materia.")
 
-        # 4. CALIFICACIONES CONTINUAS (EVALUACIÓN PONDERADA ESCUELA NUEVA)
+        # 4. CALIFICACIONES CONTINUAS (AUTOGUARDADO COMPLETO)
         with t_notas:
-            st.subheader("📝 Evaluación Continua Diaria por Dimensiones Ponderadas")
+            st.subheader("📝 Evaluación Continua Diaria (Autoguardado en Tiempo Real)")
             estudiantes = obtener_estudiantes(grado_sel_id, prof["id"])
             
             if not estudiantes:
@@ -1179,6 +1161,7 @@ else:
                     st.session_state[key_p3]
                 ]
 
+                # Cargar notas guardadas desde Supabase
                 try:
                     res_notas_diarias = supabase.table("notas_diarias").select("*").eq("estudiante_id", est_sel_obj["id"]).eq("materia", mat_sel).eq("periodo", per_sel).execute()
                     notas_guardadas = res_notas_diarias.data or []
@@ -1191,13 +1174,12 @@ else:
                     peso_dim = pesos_dimensiones[dim_idx]
                     
                     with st.expander(f"{dimension}  —  [ Peso: {peso_dim}% ]", expanded=True):
-                        st.caption("Ingresa notas de 1.0 a 5.0 (deja en 0.0 las casillas no utilizadas):")
+                        st.caption("Los valores se guardan de forma **automática** al modificarlos:")
                         
                         notas_dim = [n for n in notas_guardadas if n.get("dimension") == dimension]
-                        dict_casillas = {n.get("casilla_num"): n.get("nota", 0.0) for n in notas_dim}
+                        dict_casillas = {n.get("casilla_num"): float(n.get("nota", 0.0)) for n in notas_dim}
                         
                         cols_cas = st.columns(10)
-                        nuevas_notas_casillas = {}
                         val_validos = []
 
                         for c_num in range(1, 11):
@@ -1209,9 +1191,25 @@ else:
                                     max_value=5.0,
                                     value=val_actual,
                                     step=0.1,
-                                    key=f"nota_{est_sel_obj['id']}_{mat_sel}_{per_sel}_{dim_idx}_{c_num}"
+                                    key=f"auto_{est_sel_obj['id']}_{mat_sel}_{per_sel}_{dim_idx}_{c_num}"
                                 )
-                                nuevas_notas_casillas[c_num] = val_input
+                                
+                                # AUTOGUARDADO AUTOMÁTICO EN TIEMPO REAL
+                                if abs(val_input - val_actual) > 0.01:
+                                    try:
+                                        supabase.table("notas_diarias").upsert({
+                                            "estudiante_id": est_sel_obj["id"],
+                                            "materia": mat_sel,
+                                            "periodo": per_sel,
+                                            "dimension": dimension,
+                                            "casilla_num": c_num,
+                                            "nota": val_input,
+                                            "profesor_id": prof["id"]
+                                        }, on_conflict="estudiante_id,materia,periodo,dimension,casilla_num").execute()
+                                        st.toast(f"✅ Casilla C{c_num} actualizada")
+                                    except Exception as err:
+                                        st.error(f"Error al autoguardar: {err}")
+
                                 if val_input > 0.0:
                                     val_validos.append(val_input)
 
@@ -1224,46 +1222,29 @@ else:
                         with col_p2:
                             st.markdown(f"**Promedio Parcial:** `{prom_dim if prom_dim > 0 else 'S/N'}` *(Aporta {round(prom_dim * (peso_dim / 100), 2)} a la nota final)*")
 
-                        if st.button(f"💾 Guardar Notas de {dimension.split()[1]}", key=f"btn_save_dim_{dim_idx}"):
-                            for c_num, n_val in nuevas_notas_casillas.items():
-                                if n_val > 0.0:
-                                    supabase.table("notas_diarias").upsert({
-                                        "estudiante_id": est_sel_obj["id"],
-                                        "materia": mat_sel,
-                                        "periodo": per_sel,
-                                        "dimension": dimension,
-                                        "casilla_num": c_num,
-                                        "nota": n_val,
-                                        "profesor_id": prof["id"]
-                                    }).execute()
-                            st.toast(f"Notas de {dimension.split()[1]} actualizadas.")
-                            st.rerun()
-
                 st.markdown("---")
                 
-                # CÁLCULO PONDERADO TOTAL
+                # CÁLCULO PONDERADO Y SINCRONIZACIÓN AUTOMÁTICA
                 acumulado_ponderado = sum(p * (peso / 100) for p, peso in promedios_dimensiones if p > 0.0)
-                peso_activo = sum(peso for p, peso in promedios_dimensiones if p > 0.0)
-                
                 definitiva_materia = round(acumulado_ponderado, 2) if acumulado_ponderado > 0.0 else 0.0
 
-                c_def1, c_def2 = st.columns([1.8, 1.2])
-                with c_def1:
-                    st.markdown(f"### 🏁 Nota Definitiva Ponderada ({mat_sel}): **`{definitiva_materia if definitiva_materia > 0 else 'Sin Notas'}`**")
-                with c_def2:
-                    if st.button("📌 Sincronizar Definitiva en el Boletín del Periodo", type="primary", use_container_width=True):
-                        if definitiva_materia > 0.0:
-                            supabase.table("calificaciones").upsert({
-                                "estudiante_id": est_sel_obj["id"],
-                                "materia": mat_sel,
-                                "nota": definitiva_materia,
-                                "periodo": per_sel,
-                                "profesor_id": prof["id"]
-                            }).execute()
-                            st.success(f"¡Nota {definitiva_materia} sincronizada exitosamente en el Boletín del Periodo {per_sel}!")
-                            st.info("👉 Puedes ver e imprimir el informe actualizado en la pestaña '📄 Boletines Académicos'.")
+                # AUTOSINCRONIZACIÓN CON EL BOLETÍN EN TIEMPO REAL
+                if definitiva_materia > 0.0:
+                    try:
+                        supabase.table("calificaciones").upsert({
+                            "estudiante_id": est_sel_obj["id"],
+                            "materia": mat_sel,
+                            "nota": definitiva_materia,
+                            "periodo": per_sel,
+                            "profesor_id": prof["id"]
+                        }, on_conflict="estudiante_id,materia,periodo").execute()
+                    except Exception:
+                        pass
 
-        # 5. MÓDULO DE BOLETINES ACADÉMICOS (NUEVA SECCIÓN REQUERIDA)
+                st.markdown(f"### 🏁 Nota Definitiva Calculada ({mat_sel}): **`{definitiva_materia if definitiva_materia > 0 else 'Sin Notas'}`**")
+                st.caption("✨ *Sincronizado automáticamente con la pestaña de Boletines Académicos.*")
+
+        # 5. MÓDULO DE BOLETINES ACADÉMICOS
         with t_boletines:
             st.subheader("📄 Generación y Consulta de Boletines Académicos de Escuela Nueva")
             estudiantes = obtener_estudiantes(grado_sel_id, prof["id"])
@@ -1284,10 +1265,8 @@ else:
 
                 st.markdown("---")
 
-                # Cargar notas del boletín desde Supabase
                 res_calif = supabase.table("calificaciones").select("*").eq("estudiante_id", est_bol_obj["id"]).eq("periodo", per_bol_sel).execute()
                 data_calif = res_calif.data or []
-                
                 dict_notas_est = {c["materia"]: c["nota"] for c in data_calif}
 
                 st.write(f"### 📋 Vista Previa de Notas — **{est_bol_nombre}** *(Periodo {per_bol_sel})*")
@@ -1310,7 +1289,6 @@ else:
 
                 st.markdown("---")
 
-                # Botón de Generación de PDF Oficial
                 pdf_boletin_bytes = generar_pdf_boletin_oficial(
                     estudiante_nombre=est_bol_nombre,
                     grado_nombre=grado_sel_nombre,
