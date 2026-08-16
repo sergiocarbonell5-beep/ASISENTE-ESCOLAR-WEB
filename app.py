@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA (VERSION EVALUACIÓN DIARIA ESCUELA NUEVA)
+SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA (VERSIÓN EVALUACIÓN PONDERADA Y DINÁMICA)
 =======================================================================================
 Funcionalidades:
-- Evaluador Continuo Diario por Dimensiones (Participación, Tareas/Guías, Evaluaciones, Comportamiento).
-- Cálculo automático de promedios por categoría y Definitiva del Periodo.
+- Evaluador Continuo Diario por Dimensiones con Ponderación Configurable (0% a 100%).
+- Validación dinámica del 100% de pesos por materia.
 - PDF sobre plantilla oficial con asistencias (✓) y excusas (E).
 - Exportación en Excel oficial (.xlsx).
 - Dashboard Estadístico Completo y Observador de Convivencia con filtros.
@@ -935,9 +935,9 @@ else:
                 else:
                     st.caption("Ingresa calificaciones en la pestaña 'Calificaciones' para visualizar los promedios por materia.")
 
-        # 4. CALIFICACIONES CONTINUAS (NUEVO SISTEMA EVALUATIVO ESCUELA NUEVA)
+        # 4. CALIFICACIONES CONTINUAS (EVALUACIÓN PONDERADA ESCUELA NUEVA)
         with t_notas:
-            st.subheader("📝 Evaluación Continua Diaria por Dimensiones (Escuela Nueva)")
+            st.subheader("📝 Evaluación Continua Diaria por Dimensiones Ponderadas")
             estudiantes = obtener_estudiantes(grado_sel_id, prof["id"])
             
             if not estudiantes:
@@ -955,9 +955,49 @@ else:
                     per_sel = st.selectbox("Periodo Académico:", ["Periodo 1", "Periodo 2", "Periodo 3", "Periodo 4"])
 
                 st.markdown("---")
-                st.write(f"### ✏️ Planilla de Calificación para: **{est_sel_nombre}** — *{mat_sel} ({per_sel})*")
+                
+                # TITULO Y CONFIGURADOR DE PONDERACIÓN (%) EN LA PARTE DERECHA
+                c_head_izq, c_head_der = st.columns([1.6, 1.4])
+                
+                with c_head_izq:
+                    st.write(f"### ✏️ Planilla para: **{est_sel_nombre}**\n*{mat_sel} — {per_sel}*")
+                
+                with c_head_der:
+                    with st.expander("⚙️ Configurar % de Ponderación para esta Materia", expanded=False):
+                        st.caption("Ajusta el peso relativo de cada dimensión. La suma debe dar exactamente 100%:")
+                        
+                        # Valores guardados previamente en session_state o por defecto 25%
+                        key_p0 = f"peso_0_{mat_sel}_{per_sel}"
+                        key_p1 = f"peso_1_{mat_sel}_{per_sel}"
+                        key_p2 = f"peso_2_{mat_sel}_{per_sel}"
+                        key_p3 = f"peso_3_{mat_sel}_{per_sel}"
 
-                # Cargar notas registradas del estudiante para la materia y periodo
+                        if key_p0 not in st.session_state: st.session_state[key_p0] = 25
+                        if key_p1 not in st.session_state: st.session_state[key_p1] = 25
+                        if key_p2 not in st.session_state: st.session_state[key_p2] = 25
+                        if key_p3 not in st.session_state: st.session_state[key_p3] = 25
+
+                        p0 = st.slider("🗣️ Participación / Preguntas (%):", 0, 100, st.session_state[key_p0], step=5, key=f"s0_{mat_sel}_{per_sel}")
+                        p1 = st.slider("📚 Tareas y Guías (%):", 0, 100, st.session_state[key_p1], step=5, key=f"s1_{mat_sel}_{per_sel}")
+                        p2 = st.slider("📝 Evaluaciones Escritas (%):", 0, 100, st.session_state[key_p2], step=5, key=f"s2_{mat_sel}_{per_sel}")
+                        p3 = st.slider("🤝 Comportamiento (%):", 0, 100, st.session_state[key_p3], step=5, key=f"s3_{mat_sel}_{per_sel}")
+
+                        st.session_state[key_p0], st.session_state[key_p1], st.session_state[key_p2], st.session_state[key_p3] = p0, p1, p2, p3
+                        
+                        suma_pesos = p0 + p1 + p2 + p3
+                        if suma_pesos == 100:
+                            st.success(f"✅ Total Peso: {suma_pesos}% (Configuración Válida)")
+                        else:
+                            st.warning(f"⚠️ Total Peso: {suma_pesos}% (Ajusta los valores para sumar 100%)")
+
+                pesos_dimensiones = [
+                    st.session_state[key_p0],
+                    st.session_state[key_p1],
+                    st.session_state[key_p2],
+                    st.session_state[key_p3]
+                ]
+
+                # Cargar notas guardadas
                 try:
                     res_notas_diarias = supabase.table("notas_diarias").select("*").eq("estudiante_id", est_sel_obj["id"]).eq("materia", mat_sel).eq("periodo", per_sel).execute()
                     notas_guardadas = res_notas_diarias.data or []
@@ -966,10 +1006,12 @@ else:
 
                 promedios_dimensiones = []
 
-                # Renderizar las 4 dimensiones con sus 10 casillas cada una
+                # Renderizar las 4 dimensiones con su % de peso al lado
                 for dim_idx, dimension in enumerate(DIMENSIONES_EVALUACION):
-                    with st.expander(f"{dimension}", expanded=True):
-                        st.caption("Ingresa notas de 1.0 a 5.0 (deja en 0.0 o vacío las casillas no utilizadas):")
+                    peso_dim = pesos_dimensiones[dim_idx]
+                    
+                    with st.expander(f"{dimension}  —  [ Peso: {peso_dim}% ]", expanded=True):
+                        st.caption("Ingresa notas de 1.0 a 5.0 (deja en 0.0 las casillas no utilizadas):")
                         
                         notas_dim = [n for n in notas_guardadas if n.get("dimension") == dimension]
                         dict_casillas = {n.get("casilla_num"): n.get("nota", 0.0) for n in notas_dim}
@@ -993,17 +1035,17 @@ else:
                                 if val_input > 0.0:
                                     val_validos.append(val_input)
 
-                        # Calcular Promedio Parcial de la Dimensión
+                        # Promedio de la Dimensión
                         prom_dim = round(sum(val_validos) / len(val_validos), 2) if val_validos else 0.0
-                        promedios_dimensiones.append(prom_dim)
+                        promedios_dimensiones.append((prom_dim, peso_dim))
                         
                         col_p1, col_p2 = st.columns([3, 1])
                         with col_p1:
                             st.write(f"**Notas tomadas:** {len(val_validos)}/10")
                         with col_p2:
-                            st.markdown(f"**Promedio {dimension.split()[1]}:** `{prom_dim if prom_dim > 0 else 'S/N'}`")
+                            st.markdown(f"**Promedio Parcial:** `{prom_dim if prom_dim > 0 else 'S/N'}` *(Aporta {round(prom_dim * (peso_dim / 100), 2)} a la nota final)*")
 
-                        # Guardar cambios por dimensión
+                        # Guardar notas por dimensión
                         if st.button(f"💾 Guardar Notas de {dimension.split()[1]}", key=f"btn_save_dim_{dim_idx}"):
                             for c_num, n_val in nuevas_notas_casillas.items():
                                 if n_val > 0.0:
@@ -1021,13 +1063,17 @@ else:
 
                 st.markdown("---")
                 
-                # CÁLCULO DEL PROMEDIO DEFINITIVO
-                proms_real = [p for p in promedios_dimensiones if p > 0.0]
-                definitiva_materia = round(sum(proms_real) / len(proms_real), 2) if proms_real else 0.0
+                # CÁLCULO PONDERADO TOTAL DE LA MATERIA
+                acumulado_ponderado = sum(p * (peso / 100) for p, peso in promedios_dimensiones if p > 0.0)
+                peso_activo = sum(peso for p, peso in promedios_dimensiones if p > 0.0)
+                
+                definitiva_materia = round(acumulado_ponderado, 2) if acumulado_ponderado > 0.0 else 0.0
 
                 c_def1, c_def2 = st.columns([2, 1])
                 with c_def1:
-                    st.markdown(f"### 🏁 Nota Definitiva Calculada ({mat_sel}): **`{definitiva_materia if definitiva_materia > 0 else 'Sin Notas'}`**")
+                    st.markdown(f"### 🏁 Nota Definitiva Ponderada ({mat_sel}): **`{definitiva_materia if definitiva_materia > 0 else 'Sin Notas'}`**")
+                    if peso_activo < 100 and peso_activo > 0:
+                        st.caption(f"ℹ️ *Nota calculada sobre el {peso_activo}% de dimensiones evaluadas.*")
                 with c_def2:
                     if st.button("📌 Sincronizar Definitiva en el Boletín del Periodo", type="primary", use_container_width=True):
                         if definitiva_materia > 0.0:
