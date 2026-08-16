@@ -1,15 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA (VERSION COMPLETA UNIFICADA)
+SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA (VERSION EVALUACIÓN DIARIA ESCUELA NUEVA)
 =======================================================================================
 Funcionalidades:
-- PDF sobre plantilla oficial con asistencias (✓) y excusas (E) perfectamente calibradas.
+- Evaluador Continuo Diario por Dimensiones (Participación, Tareas/Guías, Evaluaciones, Comportamiento).
+- Cálculo automático de promedios por categoría y Definitiva del Periodo.
+- PDF sobre plantilla oficial con asistencias (✓) y excusas (E).
 - Exportación en Excel oficial (.xlsx).
-- Dashboard Estadístico Completo (% Asistencia, Días Lectivos, Alerta Inasistencias, Promedio Notas).
-- Selector libre de fecha para marcar/quitar asistencias y registrar excusas médicas/permisos.
-- Repositorio de Documentos Institucionales por materia.
-- Registro de Calificaciones, Observador de Convivencia con filtros y Tabla de Líderes (Gamer).
-- Notificaciones directas a acudientes por WhatsApp.
+- Dashboard Estadístico Completo y Observador de Convivencia con filtros.
 """
 
 import os
@@ -65,6 +63,13 @@ MENSAJES_ANIMO = [
 MATERIAS_LISTA = [
     "Inglés", "Matemáticas", "Español", "Sociales", 
     "Naturales", "Artística", "Ética", "Religión", "Informática"
+]
+
+DIMENSIONES_EVALUACION = [
+    "🗣️ Participación y Preguntas en Clase",
+    "📚 Tareas y Guías de Aprendizaje",
+    "📝 Evaluaciones y Pruebas Escritas",
+    "🤝 Comportamiento y Actitud"
 ]
 
 MESES_ESPANOL = [
@@ -236,14 +241,14 @@ def crear_link_whatsapp(telefono, nombre_estudiante, nombre_profesor):
     return f"https://wa.me/{num_limpio}?text={msg_encoded}"
 
 # ================================================================
-# GENERACIÓN DE PDF EXACTO SOBRE PLANTILLA CON CHULITO Y EXCUSA (E)
+# GENERACIÓN DE PDF EXACTO SOBRE PLANTILLA
 # ================================================================
 def generar_pdf_asistencia_oficial(grado_nombre, profesor_nombre, registros_mes, excusas_mes, estudiantes_lista, mes_nombre, sede_nombre=SEDE_DEFECTO):
     buffer = io.BytesIO()
     p = canvas.Canvas(buffer, pagesize=letter)
     width, height = letter # 612 x 792 pt
 
-    # 1. Dibujar Imagen Oficial de Fondo
+    # 1. Imagen de Fondo
     ruta_imagen = "plantilla_asistencia.png"
     if os.path.exists(ruta_imagen):
         p.drawImage(ruta_imagen, 0, 0, width=width, height=height)
@@ -251,13 +256,12 @@ def generar_pdf_asistencia_oficial(grado_nombre, profesor_nombre, registros_mes,
         p.setFont("Helvetica-Bold", 10)
         p.drawString(40, height - 40, "CENTRO EDUCATIVO RURAL SIRAVITA - CONTROL ASISTENCIA")
 
-    # 2. Estampar Datos Generales (Sede y Mes)
+    # 2. Encabezados
     p.setFont("Helvetica-Bold", 9.5)
     p.setFillColor(colors.HexColor("#111827"))
     p.drawString(110, 415, str(sede_nombre).upper())
     p.drawString(330, 415, str(mes_nombre).upper())
 
-    # Map de excusas por estudiante y día
     set_excusas = set()
     for exc in excusas_mes:
         try:
@@ -268,7 +272,7 @@ def generar_pdf_asistencia_oficial(grado_nombre, profesor_nombre, registros_mes,
         except Exception:
             pass
 
-    # 3. Coordenadas Calibradas
+    # 3. Filas y Círculos
     x_alumnos = 8
     x_grado = 78
     x_dias_inicio = 138.5
@@ -281,22 +285,18 @@ def generar_pdf_asistencia_oficial(grado_nombre, profesor_nombre, registros_mes,
     for idx, est in enumerate(estudiantes_lista[:12]):
         y_pos = y_fila_inicio - (idx * h_fila)
         
-        # Nombre del Alumno
         p.setFont("Helvetica-Bold", 6.8)
         p.setFillColor(colors.HexColor("#111827"))
         p.drawString(x_alumnos, y_pos, str(est["nombre"])[:18])
 
-        # Grado
         p.setFont("Helvetica-Bold", 6.8)
         p.setFillColor(colors.HexColor("#374151"))
         p.drawString(x_grado, y_pos, str(grado_nombre)[:6])
 
-        # Marcaciones por día (✓ verde para Asistencia, E naranja para Excusa)
         tot_asist = 0
         for d in range(1, 32):
             asistio = any(r["estudiante_id"] == est["id"] and int(r["fecha"].split("-")[2]) == d for r in registros_mes)
             tiene_excusa = (est["id"], d) in set_excusas
-            
             x_check = x_dias_inicio + ((d - 1) * w_dia)
             
             if asistio:
@@ -309,12 +309,11 @@ def generar_pdf_asistencia_oficial(grado_nombre, profesor_nombre, registros_mes,
                 p.setFillColor(colors.HexColor("#E65100"))
                 p.drawString(x_check + 1, y_pos, "E")
 
-        # Total
         p.setFont("Helvetica-Bold", 9.5)
         p.setFillColor(colors.HexColor("#111827"))
         p.drawString(x_total, y_pos, str(tot_asist))
 
-    # 4. Firma del Docente
+    # 4. Firma
     p.setFont("Helvetica-Bold", 9.5)
     p.setFillColor(colors.HexColor("#111827"))
     p.drawString(115, 28, str(profesor_nombre).upper())
@@ -324,7 +323,7 @@ def generar_pdf_asistencia_oficial(grado_nombre, profesor_nombre, registros_mes,
     buffer.seek(0)
     return buffer
 
-# GENERACIÓN EXCEL CON EXCUSA (E)
+# GENERACIÓN EXCEL
 def generar_excel_asistencia_oficial(grado_nombre, profesor_nombre, registros_mes, excusas_mes, estudiantes_lista, mes_nombre, sede_nombre=SEDE_DEFECTO):
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -651,7 +650,7 @@ else:
             "📄 Documentos Institucionales",
             "📋 Registro de Asistencia", 
             "📊 Resumen Estadístico Mensual",
-            "📝 Calificaciones",
+            "📝 Calificaciones Continuas",
             "⚖️ Observador de Convivencia",
             "🏆 Tabla de Líderes"
         ])
@@ -853,7 +852,7 @@ else:
                             else:
                                 st.caption("Sin teléfono")
 
-        # 3. RESUMEN ESTADÍSTICO MENSUAL POR GRADO (DASHBOARD POTENCIADO)
+        # 3. RESUMEN ESTADÍSTICO MENSUAL POR GRADO
         with t_estadisticas:
             st.subheader(f"📊 Dashboard Estadístico y Métricas Mensuales — {grado_sel_nombre}")
             estudiantes = obtener_estudiantes(grado_sel_id, prof["id"])
@@ -869,7 +868,6 @@ else:
                 tot_asistencias_mes = len(data_reg)
                 tot_excusas_mes = len(excusas_list)
                 
-                # Cálculo de Días Únicos Registrados
                 fechas_registradas = set(r["fecha"] for r in data_reg) if data_reg else set()
                 dias_clase_contados = max(len(fechas_registradas), 1)
                 
@@ -896,7 +894,7 @@ else:
                 g1, g2 = st.columns([1.8, 1.2])
                 
                 with g1:
-                    st.write("**📈 Distribución Diaria de Asistencia (Día por Día):**")
+                    st.write("**📈 Distribución Diaria de Asistencia:**")
                     if data_reg:
                         df_reg = pd.DataFrame(data_reg)
                         df_reg["fecha_dt"] = pd.to_datetime(df_reg["fecha"])
@@ -926,7 +924,7 @@ else:
 
                 st.markdown("---")
                 
-                # FILA 3: PROMEDIO POR MATERIA (ACADÉMICO)
+                # FILA 3: PROMEDIO POR MATERIA
                 st.write("**📊 Promedio General de Calificaciones por Asignatura:**")
                 res_notas = supabase.table("calificaciones").select("materia, nota").eq("profesor_id", prof["id"]).execute()
                 if res_notas.data:
@@ -937,44 +935,111 @@ else:
                 else:
                     st.caption("Ingresa calificaciones en la pestaña 'Calificaciones' para visualizar los promedios por materia.")
 
-        # 4. CALIFICACIONES
+        # 4. CALIFICACIONES CONTINUAS (NUEVO SISTEMA EVALUATIVO ESCUELA NUEVA)
         with t_notas:
-            st.subheader("📝 Registro de Calificaciones")
+            st.subheader("📝 Evaluación Continua Diaria por Dimensiones (Escuela Nueva)")
             estudiantes = obtener_estudiantes(grado_sel_id, prof["id"])
             
-            if estudiantes:
-                col_n1, col_n2, col_n3, col_n4 = st.columns(4)
-                with col_n1:
-                    dict_e = {e["nombre"]: e["id"] for e in estudiantes}
-                    est_nota_nom = st.selectbox("Estudiante:", list(dict_e.keys()))
-                with col_n2:
-                    mat_nota = st.selectbox("Materia de nota:", MATERIAS_LISTA)
-                with col_n3:
-                    val_nota = st.number_input("Nota (1.0 a 5.0):", min_value=1.0, max_value=5.0, value=5.0, step=0.1)
-                with col_n4:
-                    periodo_nota = st.selectbox("Periodo:", ["Periodo 1", "Periodo 2", "Periodo 3", "Periodo 4"])
+            if not estudiantes:
+                st.info("Agrega estudiantes para gestionar sus calificaciones.")
+            else:
+                dict_e = {e["nombre"]: e for e in estudiantes}
                 
-                if st.button("💾 Guardar Calificación", use_container_width=True):
-                    supabase.table("calificaciones").insert({
-                        "estudiante_id": dict_e[est_nota_nom],
-                        "materia": mat_nota,
-                        "nota": val_nota,
-                        "periodo": periodo_nota,
-                        "profesor_id": prof["id"]
-                    }).execute()
-                    st.success("Nota guardada exitosamente.")
-                    st.rerun()
+                col_e1, col_e2, col_e3 = st.columns(3)
+                with col_e1:
+                    est_sel_nombre = st.selectbox("Estudiante:", list(dict_e.keys()))
+                    est_sel_obj = dict_e[est_sel_nombre]
+                with col_e2:
+                    mat_sel = st.selectbox("Materia / Asignatura:", MATERIAS_LISTA)
+                with col_e3:
+                    per_sel = st.selectbox("Periodo Académico:", ["Periodo 1", "Periodo 2", "Periodo 3", "Periodo 4"])
 
                 st.markdown("---")
-                st.write("**Historial de Notas Registradas:**")
-                res_notas = supabase.table("calificaciones").select("estudiante_id, materia, nota, periodo").eq("profesor_id", prof["id"]).execute()
-                if res_notas.data:
-                    id_to_name = {e["id"]: e["nombre"] for e in estudiantes}
-                    df_notas = pd.DataFrame([
-                        {"Estudiante": id_to_name.get(n["estudiante_id"], "N/A"), "Materia": n["materia"], "Nota": n["nota"], "Periodo": n["periodo"]}
-                        for n in res_notas.data if n["estudiante_id"] in id_to_name
-                    ])
-                    st.dataframe(df_notas, use_container_width=True)
+                st.write(f"### ✏️ Planilla de Calificación para: **{est_sel_nombre}** — *{mat_sel} ({per_sel})*")
+
+                # Cargar notas registradas del estudiante para la materia y periodo
+                try:
+                    res_notas_diarias = supabase.table("notas_diarias").select("*").eq("estudiante_id", est_sel_obj["id"]).eq("materia", mat_sel).eq("periodo", per_sel).execute()
+                    notas_guardadas = res_notas_diarias.data or []
+                except Exception:
+                    notas_guardadas = []
+
+                promedios_dimensiones = []
+
+                # Renderizar las 4 dimensiones con sus 10 casillas cada una
+                for dim_idx, dimension in enumerate(DIMENSIONES_EVALUACION):
+                    with st.expander(f"{dimension}", expanded=True):
+                        st.caption("Ingresa notas de 1.0 a 5.0 (deja en 0.0 o vacío las casillas no utilizadas):")
+                        
+                        notas_dim = [n for n in notas_guardadas if n.get("dimension") == dimension]
+                        dict_casillas = {n.get("casilla_num"): n.get("nota", 0.0) for n in notas_dim}
+                        
+                        cols_cas = st.columns(10)
+                        nuevas_notas_casillas = {}
+                        val_validos = []
+
+                        for c_num in range(1, 11):
+                            val_actual = float(dict_casillas.get(c_num, 0.0))
+                            with cols_cas[c_num - 1]:
+                                val_input = st.number_input(
+                                    f"C{c_num}",
+                                    min_value=0.0,
+                                    max_value=5.0,
+                                    value=val_actual,
+                                    step=0.1,
+                                    key=f"nota_{est_sel_obj['id']}_{mat_sel}_{per_sel}_{dim_idx}_{c_num}"
+                                )
+                                nuevas_notas_casillas[c_num] = val_input
+                                if val_input > 0.0:
+                                    val_validos.append(val_input)
+
+                        # Calcular Promedio Parcial de la Dimensión
+                        prom_dim = round(sum(val_validos) / len(val_validos), 2) if val_validos else 0.0
+                        promedios_dimensiones.append(prom_dim)
+                        
+                        col_p1, col_p2 = st.columns([3, 1])
+                        with col_p1:
+                            st.write(f"**Notas tomadas:** {len(val_validos)}/10")
+                        with col_p2:
+                            st.markdown(f"**Promedio {dimension.split()[1]}:** `{prom_dim if prom_dim > 0 else 'S/N'}`")
+
+                        # Guardar cambios por dimensión
+                        if st.button(f"💾 Guardar Notas de {dimension.split()[1]}", key=f"btn_save_dim_{dim_idx}"):
+                            for c_num, n_val in nuevas_notas_casillas.items():
+                                if n_val > 0.0:
+                                    supabase.table("notas_diarias").upsert({
+                                        "estudiante_id": est_sel_obj["id"],
+                                        "materia": mat_sel,
+                                        "periodo": per_sel,
+                                        "dimension": dimension,
+                                        "casilla_num": c_num,
+                                        "nota": n_val,
+                                        "profesor_id": prof["id"]
+                                    }).execute()
+                            st.toast(f"Notas de {dimension.split()[1]} actualizadas.")
+                            st.rerun()
+
+                st.markdown("---")
+                
+                # CÁLCULO DEL PROMEDIO DEFINITIVO
+                proms_real = [p for p in promedios_dimensiones if p > 0.0]
+                definitiva_materia = round(sum(proms_real) / len(proms_real), 2) if proms_real else 0.0
+
+                c_def1, c_def2 = st.columns([2, 1])
+                with c_def1:
+                    st.markdown(f"### 🏁 Nota Definitiva Calculada ({mat_sel}): **`{definitiva_materia if definitiva_materia > 0 else 'Sin Notas'}`**")
+                with c_def2:
+                    if st.button("📌 Sincronizar Definitiva en el Boletín del Periodo", type="primary", use_container_width=True):
+                        if definitiva_materia > 0.0:
+                            supabase.table("calificaciones").upsert({
+                                "estudiante_id": est_sel_obj["id"],
+                                "materia": mat_sel,
+                                "nota": definitiva_materia,
+                                "periodo": per_sel,
+                                "profesor_id": prof["id"]
+                            }).execute()
+                            st.success(f"Nota {definitiva_materia} guardada en el consolidado del {per_sel}.")
+                            st.rerun()
 
         # 5. OBSERVADOR DE CONVIVENCIA CON FILTROS AVANZADOS
         with t_convivencia:
