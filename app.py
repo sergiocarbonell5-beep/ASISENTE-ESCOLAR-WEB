@@ -237,30 +237,30 @@ def generar_pdf_asistencia_oficial(grado_nombre, profesor_nombre, registros_mes,
     p.drawString(110, 415, str(sede_nombre).upper())
     p.drawString(330, 415, str(mes_nombre).upper())
 
-    # 3. Coordenadas Calibradas para Filas de la Tabla
-    x_alumnos = 10        # Margen amplio a la izquierda
-    x_grado = 118         # Centrado en columna GRADO
-    x_dias_inicio = 138.5 # Primera columna de días
-    w_dia = 13.5          # Ancho exacto por día
+    # 3. Coordenadas Calibradas para las Filas de la Tabla
+    x_alumnos = 8         # Margen ajustado a la izquierda
+    x_grado = 78          # Estrictamente contenido en la casilla GRADO
+    x_dias_inicio = 138.5 # Alineado con la primera columna de círculos (día 1)
+    w_dia = 13.5          # Ancho horizontal entre círculos
     x_total = 560         # Columna TOTAL
 
-    y_fila_inicio = 343   # Centrado dentro del primer renglón
-    h_fila = 19.1         # Separación vertical exacta entre renglones
+    y_fila_inicio = 328   # BAJADO: Comienza en el primer renglón con círculos (debajo de la barra crema)
+    h_fila = 19.1         # Distancia vertical exacta entre renglones
 
-    for idx, est in enumerate(estudiantes_lista[:13]):
+    for idx, est in enumerate(estudiantes_lista[:12]):
         y_pos = y_fila_inicio - (idx * h_fila)
         
-        # Nombre del Alumno (Negro elegante, fuente 7.5pt Bold)
-        p.setFont("Helvetica-Bold", 7.5)
+        # Nombre del Alumno (Limitado para no invadir la casilla GRADO)
+        p.setFont("Helvetica-Bold", 6.8)
         p.setFillColor(colors.HexColor("#111827"))
-        p.drawString(x_alumnos, y_pos, str(est["nombre"])[:26])
+        p.drawString(x_alumnos, y_pos, str(est["nombre"])[:18])
 
-        # Grado (Centrado, fuente 7.5pt Bold)
-        p.setFont("Helvetica-Bold", 7.5)
+        # Grado (Perfectamente encajado en su casilla)
+        p.setFont("Helvetica-Bold", 6.8)
         p.setFillColor(colors.HexColor("#374151"))
-        p.drawString(x_grado, y_pos, str(grado_nombre)[:7])
+        p.drawString(x_grado, y_pos, str(grado_nombre)[:6])
 
-        # Asistencias por día (✓ Verde Institucional en 11pt)
+        # Asistencias por día (✓ Verde Institucional centrado en cada círculo)
         tot_asist = 0
         for d in range(1, 32):
             asistio = any(r["estudiante_id"] == est["id"] and int(r["fecha"].split("-")[2]) == d for r in registros_mes)
