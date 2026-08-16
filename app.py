@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA (PDF FIDELIDAD IMAGEN Y DÍAS HÁBILES)
-==================================================================================
-Funcionalidades: Formato PDF oficial, Excel, Días Hábiles (Lunes a Viernes),
-Días No Lectivos/Sin Clase, Alertas por WhatsApp y Gestión Multidocente.
+SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA (PDF FIDELIDAD 100% SOBRE PLANTILLA IMAGEN)
+=======================================================================================
+Funcionalidades: PDF montado sobre imagen oficial, Excel, Días Hábiles (Lunes a Viernes),
+Días No Lectivos, Alertas de WhatsApp y Gestión Multidocente.
 """
 
 import os
@@ -216,86 +216,72 @@ def crear_link_whatsapp(telefono, nombre_estudiante, nombre_profesor):
     return f"https://wa.me/{num_limpio}?text={msg_encoded}"
 
 # ================================================================
-# GENERACIÓN DE PDF FIDELIDAD OFICIAL
+# GENERACIÓN DE PDF EXACTO SOBRE PLANTILLA DE IMAGEN
 # ================================================================
 def generar_pdf_asistencia_oficial(grado_nombre, profesor_nombre, registros_mes, estudiantes_lista, mes_nombre, sede_nombre=SEDE_DEFECTO):
     buffer = io.BytesIO()
     p = canvas.Canvas(buffer, pagesize=letter)
-    width, height = letter
+    width, height = letter # 612 x 792 pt
 
-    # Dibujar membrete estructurado
+    # 1. Dibujar Imagen Oficial de Fondo
+    ruta_imagen = "plantilla_asistencia.png"
+    if os.path.exists(ruta_imagen):
+        p.drawImage(ruta_imagen, 0, 0, width=width, height=height)
+    else:
+        # Respaldo visual si no se encuentra el archivo de imagen
+        p.setFont("Helvetica-Bold", 12)
+        p.drawString(40, height - 40, "CENTRO EDUCATIVO RURAL SIRAVITA - CONTROL ASISTENCIA")
+
+    # 2. Estampar Datos Generales (Sede, Mes, Año)
     p.setFont("Helvetica-Bold", 10)
-    p.drawCentredString(width / 2.0, height - 30, "REPÚBLICA DE COLOMBIA")
-    p.drawCentredString(width / 2.0, height - 42, "SECRETARÍA DE EDUCACIÓN DEPARTAMENTAL NORTE DE SANTANDER")
-    p.drawCentredString(width / 2.0, height - 54, "CENTRO EDUCATIVO RURAL SIRAVITA")
-    p.drawCentredString(width / 2.0, height - 66, "MUNICIPIO DE ARBOLEDAS")
+    p.setFillColor(colors.HexColor("#000000"))
     
-    p.setFont("Helvetica", 7)
-    p.drawCentredString(width / 2.0, height - 76, "DANE 254051000139 | DECRETO 00252 | RESOLUCIÓN 008708")
-    
-    p.setFont("Helvetica-BoldOblique", 9)
-    p.setFillColor(colors.HexColor("#2E7D32"))
-    p.drawCentredString(width / 2.0, height - 88, "Lema: Con Escuela nueva y metodología activa para una educación proactiva.")
-    
-    p.setFont("Helvetica-Bold", 13)
-    p.setFillColor(colors.HexColor("#004D25"))
-    p.drawCentredString(width / 2.0, height - 110, "REGISTRO CONTROL ASISTENCIA")
+    p.drawString(100, 415, str(sede_nombre).upper())
+    p.drawString(295, 415, str(mes_nombre).upper())
 
-    p.setFont("Helvetica-Bold", 9)
-    p.setFillColor(colors.black)
-    p.drawString(40, height - 130, f"SEDE: {sede_nombre.upper()}        MES DE: {mes_nombre.upper()}        AÑO: 2026")
+    # 3. Estampar Filas de Alumnos y Marcas de Asistencia
+    # Coordenadas calibradas para la tabla de la imagen original
+    x_alumnos = 12
+    x_grado = 85
+    x_dias_inicio = 135
+    w_dia = 13.6
+    x_total = 566
 
-    # Tabla
-    x_start = 40
-    y_start = height - 150
-    col_w_nombre = 140
-    col_w_grado = 45
-    col_w_dia = 9.8
-    col_w_total = 25
+    y_fila_inicio = 368
+    h_fila = 19.5
 
-    # Encabezado Tabla
-    p.setFillColor(colors.HexColor("#1B432C"))
-    p.rect(x_start, y_start - 15, col_w_nombre + col_w_grado + (col_w_dia * 31) + col_w_total, 15, fill=True, stroke=True)
-    
-    p.setFillColor(colors.white)
-    p.setFont("Helvetica-Bold", 7)
-    p.drawString(x_start + 5, y_start - 11, "ALUMNOS")
-    p.drawString(x_start + col_w_nombre + 5, y_start - 11, "GRADO")
-    
-    for d in range(1, 32):
-        p.drawString(x_start + col_w_nombre + col_w_grado + ((d - 1) * col_w_dia) + 2, y_start - 11, str(d))
-    p.drawString(x_start + col_w_nombre + col_w_grado + (31 * col_w_dia) + 2, y_start - 11, "TOT")
-
-    # Filas Alumnos
-    y_curr = y_start - 15
-    p.setFillColor(colors.black)
-    p.setFont("Helvetica", 7)
-
-    for est in estudiantes_lista:
-        y_curr -= 14
-        p.rect(x_start, y_curr, col_w_nombre + col_w_grado + (col_w_dia * 31) + col_w_total, 14, fill=False, stroke=True)
+    for idx, est in enumerate(estudiantes_lista[:13]): # Límite de filas de la planilla
+        y_pos = y_fila_inicio - (idx * h_fila)
         
-        p.drawString(x_start + 3, y_curr + 4, str(est["nombre"])[:28])
-        p.drawString(x_start + col_w_nombre + 3, y_curr + 4, str(grado_nombre)[:8])
+        # Nombre del Alumno
+        p.setFont("Helvetica-Bold", 7.5)
+        p.setFillColor(colors.HexColor("#1A237E"))
+        p.drawString(x_alumnos, y_pos, str(est["nombre"])[:24])
 
+        # Grado
+        p.setFont("Helvetica", 7.5)
+        p.setFillColor(colors.HexColor("#333333"))
+        p.drawString(x_grado, y_pos, str(grado_nombre)[:8])
+
+        # Asistencias por día (✓)
         tot_asist = 0
         for d in range(1, 32):
             asistio = any(r["estudiante_id"] == est["id"] and int(r["fecha"].split("-")[2]) == d for r in registros_mes)
             if asistio:
                 tot_asist += 1
+                x_check = x_dias_inicio + ((d - 1) * w_dia)
+                p.setFont("Helvetica-Bold", 9)
                 p.setFillColor(colors.HexColor("#2E7D32"))
-                p.setFont("Helvetica-Bold", 7)
-                p.drawString(x_start + col_w_nombre + col_w_grado + ((d - 1) * col_w_dia) + 2, y_curr + 4, "✓")
-                p.setFillColor(colors.black)
-                p.setFont("Helvetica", 7)
+                p.drawString(x_check + 2, y_pos - 1, "✓")
 
-        p.drawString(x_start + col_w_nombre + col_w_grado + (31 * col_w_dia) + 5, y_curr + 4, str(tot_asist))
+        # Total
+        p.setFont("Helvetica-Bold", 8)
+        p.setFillColor(colors.HexColor("#000000"))
+        p.drawString(x_total, y_pos, str(tot_asist))
 
-    # Pie de página
-    p.setFont("Helvetica-Bold", 9)
-    p.drawString(40, 40, f"DOCENTE: {profesor_nombre.upper()}")
-    p.setFont("Helvetica-Oblique", 7)
-    p.drawString(40, 25, "Documento Oficial - Uso Académico - C.E.R. Siravita")
+    # 4. Firma del Docente
+    p.setFont("Helvetica-Bold", 10)
+    p.drawString(120, 28, str(profesor_nombre).upper())
 
     p.showPage()
     p.save()
@@ -704,7 +690,7 @@ else:
 
             st.write("")
 
-            # BOTONES DE EXPORTACIÓN (PDF EXACTO E EXCEL)
+            # BOTONES DE EXPORTACIÓN (PDF EXACTO SOBRE PLANTILLA DE IMAGEN E EXCEL)
             if estudiantes:
                 mes_actual_nombre = MESES_ESPANOL[hoy_dt.month - 1]
                 res_reg = supabase.table("registros").select("*").eq("grado_id", grado_sel_id).execute()
@@ -780,7 +766,7 @@ else:
             if es_fin_semana:
                 st.info("🌴 Hoy es fin de semana (Sábado/Domingo). El registro de asistencia no está activo.")
             elif registro_no_lectivo:
-                st.info(f"🚫 Día declarado sin actividades escolares por: **{registro_no_lectivo['motivo']}**.")
+                st.info(f"🚫 Día declaredo sin actividades escolares por: **{registro_no_lectivo['motivo']}**.")
             elif not estudiantes:
                 st.info("No hay alumnos registrados en este curso. Agrégalos desde la barra lateral.")
             else:
