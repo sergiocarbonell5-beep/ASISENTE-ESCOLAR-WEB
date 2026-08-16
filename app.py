@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA (VERSION SINCRONIZACIÓN PERFECTA)
+SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA (VERSIÓN CON SINCRONIZACIÓN GARANTIZADA)
 =======================================================================================
 Funcionalidades:
 - Autoguardado instantáneo de notas diarias en Supabase.
-- Normalización de nombres de asignaturas para sincronización exacta con Boletines.
+- Sincronización explícita y directa de Definitivas con los Boletines Académicos.
 - Módulo de Boletines Oficiales en PDF (2 Páginas).
 - PDF y Excel de Asistencia calibrados sobre plantilla oficial.
 - Dashboard Estadístico y Observador de Convivencia con filtros.
@@ -60,7 +60,6 @@ MENSAJES_ANIMO = [
     "¡Tu esfuerzo no pasa desapercibido!",
 ]
 
-# Lista Única de Asignaturas Normalizadas
 MATERIAS_LISTA = [
     "Ciencias Naturales Educación ambiental",
     "Ciencias Sociales, historia, geografía, constitución y democrática.",
@@ -275,7 +274,7 @@ def crear_link_whatsapp(telefono, nombre_estudiante, nombre_profesor):
 def generar_pdf_boletin_oficial(estudiante_nombre, grado_nombre, periodo, sede_nombre, profesor_nombre, dict_notas, observaciones_txt):
     buffer = io.BytesIO()
     p = canvas.Canvas(buffer, pagesize=letter)
-    width, height = letter # 612 x 792 pt
+    width, height = letter
 
     # ------------------ HOJA 1: INFORME Y NOTAS ------------------
     p.setFont("Helvetica-Bold", 10)
@@ -338,7 +337,6 @@ def generar_pdf_boletin_oficial(estudiante_nombre, grado_nombre, periodo, sede_n
         p.rect(35, y_curr, 180, h_row, fill=False, stroke=True)
         p.drawString(40, y_curr + 5, mat[:38])
 
-        # Búsqueda flexible por nombre normalizado
         key_norm = normalizar_texto(mat)
         nota_val = 0.0
         for k_materia, val_n in dict_notas.items():
@@ -764,7 +762,6 @@ else:
 
         st.markdown("---")
         
-        # GESTIÓN DE CURSOS Y ESTUDIANTES
         with st.expander("⚙️ Gestionar Cursos / Grados"):
             nuevo_grado_txt = st.text_input("Nombre de nuevo curso:", placeholder="Ej. Grado Cuarto")
             if st.button("➕ Crear Curso", use_container_width=True):
@@ -871,7 +868,7 @@ else:
                         bytes_dec = base64.b64decode(doc['contenido_b64'])
                         st.download_button("⬇️ Descargar", data=bytes_dec, file_name=doc['nombre'], use_container_width=True)
 
-        # 2. REGISTRO Y EDICIÓN DE ASISTENCIA MULTIFUNCIÓN
+        # 2. REGISTRO Y EDICIÓN DE ASISTENCIA
         with t_asistencia:
             estudiantes = obtener_estudiantes(grado_sel_id, prof["id"])
             
@@ -1104,9 +1101,9 @@ else:
                 else:
                     st.caption("Ingresa calificaciones en la pestaña 'Calificaciones' para visualizar los promedios por materia.")
 
-        # 4. CALIFICACIONES CONTINUAS (CON AUTOSINCRONIZACIÓN CORREGIDA)
+        # 4. CALIFICACIONES CONTINUAS
         with t_notas:
-            st.subheader("📝 Evaluación Continua Diaria (Autoguardado y Sincronización)")
+            st.subheader("📝 Evaluación Continua Diaria (Autoguardado y Sincronización Directa)")
             estudiantes = obtener_estudiantes(grado_sel_id, prof["id"])
             
             if not estudiantes:
@@ -1225,24 +1222,30 @@ else:
 
                 st.markdown("---")
                 
-                # CÁLCULO PONDERADO Y AUTOSINCRONIZACIÓN INMEDIATA EN TABLA DE CALIFICACIONES
                 acumulado_ponderado = sum(p * (peso / 100) for p, peso in promedios_dimensiones if p > 0.0)
                 definitiva_materia = round(acumulado_ponderado, 2) if acumulado_ponderado > 0.0 else 0.0
 
-                if definitiva_materia > 0.0:
-                    try:
-                        supabase.table("calificaciones").upsert({
-                            "estudiante_id": est_sel_obj["id"],
-                            "materia": mat_sel,
-                            "nota": definitiva_materia,
-                            "periodo": per_sel,
-                            "profesor_id": prof["id"]
-                        }, on_conflict="estudiante_id,materia,periodo").execute()
-                    except Exception as err:
-                        pass
-
-                st.markdown(f"### 🏁 Nota Definitiva Calculada ({mat_sel}): **`{definitiva_materia if definitiva_materia > 0 else 'Sin Notas'}`**")
-                st.success("✨ ¡Sincronizado automáticamente con la pestaña de Boletines Académicos!")
+                # BOTÓN Y PROCESO EXPLÍCITO DE SINCRONIZACIÓN
+                c_def1, c_def2 = st.columns([1.8, 1.2])
+                with c_def1:
+                    st.markdown(f"### 🏁 Nota Definitiva Calculada ({mat_sel}): **`{definitiva_materia if definitiva_materia > 0 else 'Sin Notas'}`**")
+                with c_def2:
+                    if st.button("📌 Sincronizar Definitiva con Boletines", type="primary", use_container_width=True):
+                        if definitiva_materia > 0.0:
+                            try:
+                                supabase.table("calificaciones").upsert({
+                                    "estudiante_id": est_sel_obj["id"],
+                                    "materia": mat_sel,
+                                    "nota": definitiva_materia,
+                                    "periodo": per_sel,
+                                    "profesor_id": prof["id"]
+                                }, on_conflict="estudiante_id,materia,periodo").execute()
+                                st.success(f"¡Nota {definitiva_materia} guardada en Boletines correctamente!")
+                                st.rerun()
+                            except Exception as err:
+                                st.error(f"Error al guardar en boletines: {err}")
+                        else:
+                            st.warning("Debes ingresar notas antes de sincronizar.")
 
         # 5. MÓDULO DE BOLETINES ACADÉMICOS
         with t_boletines:
@@ -1265,14 +1268,34 @@ else:
 
                 st.markdown("---")
 
-                # Consulta de Calificaciones en Supabase
+                # Cargar calificaciones consolidadas
                 res_calif = supabase.table("calificaciones").select("*").eq("estudiante_id", est_bol_obj["id"]).eq("periodo", per_bol_sel).execute()
                 data_calif = res_calif.data or []
-                
-                # Mapeo flexible
-                dict_notas_est = {}
-                for c in data_calif:
-                    dict_notas_est[c["materia"]] = c["nota"]
+                dict_notas_est = {c["materia"]: c["nota"] for c in data_calif}
+
+                # CÁLCULO DIRECTO DESDE NOTAS DIARIAS SI LA TABLA CONSOLIDADA NO TIENE DATOS
+                try:
+                    res_diarias_todas = supabase.table("notas_diarias").select("*").eq("estudiante_id", est_bol_obj["id"]).eq("periodo", per_bol_sel).execute()
+                    diarias_todas = res_diarias_todas.data or []
+                except Exception:
+                    diarias_todas = []
+
+                if diarias_todas:
+                    for m in MATERIAS_LISTA:
+                        key_n = normalizar_texto(m)
+                        ya_existe = any(normalizar_texto(k) == key_n for k in dict_notas_est.keys())
+                        if not ya_existe:
+                            # Calcular nota asignada para esta materia
+                            notas_m = [nd for nd in diarias_todas if normalizar_texto(nd.get("materia")) == key_n]
+                            if notas_m:
+                                dims_map = {}
+                                for nd in notas_m:
+                                    d_nom = nd.get("dimension")
+                                    dims_map.setdefault(d_nom, []).append(float(nd.get("nota", 0)))
+                                
+                                prom_dims = [sum(vals)/len(vals) for vals in dims_map.values() if vals]
+                                if prom_dims:
+                                    dict_notas_est[m] = round(sum(prom_dims) / len(prom_dims), 2)
 
                 st.write(f"### 📋 Vista Previa de Notas — **{est_bol_nombre}** *(Periodo {per_bol_sel})*")
                 
