@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA (VERSIÓN EVALUACIÓN PONDERADA Y DINÁMICA)
+SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA (VERSION CON BOLETINES OFICIALES)
 =======================================================================================
 Funcionalidades:
-- Evaluador Continuo Diario por Dimensiones con Ponderación Configurable (0% a 100%).
-- Validación dinámica del 100% de pesos por materia.
-- PDF sobre plantilla oficial con asistencias (✓) y excusas (E).
-- Exportación en Excel oficial (.xlsx).
-- Dashboard Estadístico Completo y Observador de Convivencia con filtros.
+- Módulo de Boletines Académicos en PDF con diseño 100% fiel al formato institucional.
+- Conversión automática Cuantitativa -> Cualitativa P.E.N. -> Escala Nacional.
+- Redirección / Sincronización directa desde Calificaciones a Boletines.
+- Evaluador Continuo Diario por Dimensiones Ponderadas.
+- PDF y Excel de Asistencia calibrados sobre plantilla oficial.
+- Dashboard Estadístico y Observador de Convivencia con filtros.
 """
 
 import os
@@ -61,8 +62,17 @@ MENSAJES_ANIMO = [
 ]
 
 MATERIAS_LISTA = [
-    "Inglés", "Matemáticas", "Español", "Sociales", 
-    "Naturales", "Artística", "Ética", "Religión", "Informática"
+    "Ciencias Naturales Educación ambiental",
+    "Ciencias Sociales, historia, geografía, constitución y democrática.",
+    "Cátedra de la Paz",
+    "Educación Artística",
+    "Educación Física, recreación y deportes",
+    "Matemáticas",
+    "Humanidades lengua castellana",
+    "Idioma extranjero",
+    "Tecnología e informática",
+    "Ética y valores humanos",
+    "Educación religiosa"
 ]
 
 DIMENSIONES_EVALUACION = [
@@ -90,6 +100,21 @@ supabase = init_supabase()
 
 if "profesor" not in st.session_state:
     st.session_state.profesor = None
+
+# ================================================================
+# LÓGICA DE ESCALA DE VALORACIÓN INSTITUCIONAL
+# ================================================================
+def obtener_valoracion_cualitativa(nota):
+    if nota >= 4.8:
+        return "DESEMPEÑO SUPERIOR", "EXCELENTE"
+    elif nota >= 4.0:
+        return "DESEMPEÑO ALTO", "BUENO"
+    elif nota >= 3.0:
+        return "DESEMPEÑO BÁSICO", "ACEPTABLE"
+    elif nota > 0.0:
+        return "DESEMPEÑO BAJO", "INSUFICIENTE"
+    else:
+        return "PENDIENTE", "PENDIENTE"
 
 # ================================================================
 # AUTENTICACIÓN
@@ -241,8 +266,166 @@ def crear_link_whatsapp(telefono, nombre_estudiante, nombre_profesor):
     return f"https://wa.me/{num_limpio}?text={msg_encoded}"
 
 # ================================================================
-# GENERACIÓN DE PDF EXACTO SOBRE PLANTILLA
+# GENERACIÓN DE PDF DE BOLETÍN ACADÉMICO OFICIAL
 # ================================================================
+def generar_pdf_boletin_oficial(estudiante_nombre, grado_nombre, periodo, sede_nombre, profesor_nombre, dict_notas, observaciones_txt):
+    buffer = io.BytesIO()
+    p = canvas.Canvas(buffer, pagesize=letter)
+    width, height = letter # 612 x 792 pt
+
+    # ------------------ HOJA 1: INFORME Y NOTAS ------------------
+    # Encabezado Institucional
+    p.setFont("Helvetica-Bold", 10)
+    p.drawCentredString(width / 2.0, height - 35, "REPÚBLICA DE COLOMBIA")
+    p.drawCentredString(width / 2.0, height - 48, "SECRETARÍA DE EDUCACIÓN DEPARTAMENTAL NORTE DE SANTANDER")
+    p.drawCentredString(width / 2.0, height - 61, "CENTRO EDUCATIVO RURAL SIRAVITA")
+    p.drawCentredString(width / 2.0, height - 74, "MUNICIPIO DE ARBOLEDAS")
+
+    # Franja Verde Institucional con Datos DANE
+    p.setFillColor(colors.HexColor("#008037"))
+    p.rect(35, height - 120, width - 70, 35, fill=True, stroke=False)
+    p.setFillColor(colors.white)
+    p.setFont("Helvetica-Bold", 8)
+    p.drawCentredString(width / 2.0, height - 97, "DANE 254051000139 | DECRETO DE CREACIÓN 00252 DEL 12 DE ABRIL DE 2006")
+    
+    # Caja amarilla de aprobación
+    p.setFillColor(colors.HexColor("#FFF100"))
+    p.rect(130, height - 114, width - 260, 11, fill=True, stroke=False)
+    p.setFillColor(colors.black)
+    p.setFont("Helvetica-Bold", 7)
+    p.drawCentredString(width / 2.0, height - 111, "RESOLUCIÓN DE APROBACIÓN DE ESTUDIO 8: 008708-24-10-2024")
+
+    # Título Boletín
+    p.setFillColor(colors.black)
+    p.setFont("Helvetica-Bold", 11)
+    p.drawCentredString(width / 2.0, height - 142, "Boletín Académico Escuela Nueva de Básica Primaria")
+
+    # Datos del Alumno y Sede
+    p.setFont("Helvetica", 9)
+    y_datos = height - 165
+    p.drawString(40, y_datos, f"Sede: {sede_nombre.upper()}")
+    p.drawString(220, y_datos, f"Periodo: {periodo.upper()}")
+    p.drawString(380, y_datos, f"Año: 2026")
+
+    p.drawString(40, y_datos - 18, f"Estudiante: {estudiante_nombre.upper()}")
+    p.drawString(380, y_datos - 18, f"Grado: {grado_nombre.upper()}")
+
+    p.drawString(40, y_datos - 36, f"Docente: {profesor_nombre.upper()}")
+
+    # Tabla de Calificaciones
+    y_tabla_top = y_datos - 55
+    h_header = 22
+    h_row = 18
+
+    # Headers de Tabla
+    p.setFillColor(colors.HexColor("#FFE6CC")) # Beige/Naranja suave
+    p.rect(35, y_tabla_top - h_header, 180, h_header, fill=True, stroke=True)
+    p.setFillColor(colors.HexColor("#00A2E8")) # Azul institucional
+    p.rect(215, y_tabla_top - h_header, 130, h_header, fill=True, stroke=True)
+    p.setFillColor(colors.HexColor("#00A2E8"))
+    p.rect(345, y_tabla_top - h_header, 110, h_header, fill=True, stroke=True)
+    p.setFillColor(colors.HexColor("#FFC90E")) # Amarillo dorado
+    p.rect(455, y_tabla_top - h_header, 120, h_header, fill=True, stroke=True)
+
+    p.setFillColor(colors.black)
+    p.setFont("Helvetica-Bold", 7.5)
+    p.drawString(40, y_tabla_top - 14, "ÁREAS / ASIGNATURAS")
+    p.drawString(220, y_tabla_top - 14, "P.E.N. Valoración Cualitativa")
+    p.drawString(350, y_tabla_top - 14, "Valoración Cuantitativa")
+    p.drawString(460, y_tabla_top - 14, "Escala Nacional")
+
+    # Filas de Materias
+    y_curr = y_tabla_top - h_header
+    for mat in MATERIAS_LISTA:
+        y_curr -= h_row
+        p.setFont("Helvetica-Oblique", 7)
+        p.rect(35, y_curr, 180, h_row, fill=False, stroke=True)
+        p.drawString(40, y_curr + 5, mat[:38])
+
+        nota_val = float(dict_notas.get(mat, 0.0))
+        val_pen, val_nac = obtener_valoracion_cualitativa(nota_val)
+
+        p.setFont("Helvetica-Bold", 7.5)
+        p.rect(215, y_curr, 130, h_row, fill=False, stroke=True)
+        p.drawString(220, y_curr + 5, val_pen)
+
+        p.rect(345, y_curr, 110, h_row, fill=False, stroke=True)
+        p.drawString(380, y_curr + 5, f"{nota_val:.1f}" if nota_val > 0 else "---")
+
+        p.rect(455, y_curr, 120, h_row, fill=False, stroke=True)
+        p.drawString(460, y_curr + 5, val_nac)
+
+    # Sección de Observaciones
+    y_obs = y_curr - 30
+    p.setFont("Helvetica-Bold", 9)
+    p.drawString(40, y_obs, "OBSERVACIONES:")
+    p.setFont("Helvetica-Oblique", 8.5)
+    p.drawString(40, y_obs - 18, f"..... {observaciones_txt if observaciones_txt else 'Buen rendimiento académico y compromiso en el aula.'} .....")
+
+    p.showPage()
+
+    # ------------------ HOJA 2: ESCALA Y FIRMAS ------------------
+    # Escala de Valoración Institucional Tabla
+    y_e = height - 120
+    p.setFont("Helvetica-BoldOblique", 11)
+    p.drawCentredString(width / 2.0, y_e + 20, "ESCALA DE VALORACIÓN INSTITUCIONAL")
+
+    # Header Escala
+    p.setFillColor(colors.HexColor("#00A2E8"))
+    p.rect(130, y_e - 30, 130, 30, fill=True, stroke=True)
+    p.setFillColor(colors.HexColor("#FFC90E"))
+    p.rect(260, y_e - 30, 110, 30, fill=True, stroke=True)
+    p.setFillColor(colors.HexColor("#FFF100"))
+    p.rect(370, y_e - 30, 110, 30, fill=True, stroke=True)
+
+    p.setFillColor(colors.black)
+    p.setFont("Helvetica-Bold", 7)
+    p.drawString(135, y_e - 12, "ESCUELA NUEVA")
+    p.drawString(135, y_e - 22, "VALOR CUALITATIVA")
+
+    p.drawString(265, y_e - 12, "ESCALA INSTITUCIONAL")
+    p.drawString(265, y_e - 22, "VALOR CUALITATIVA")
+
+    p.drawString(375, y_e - 12, "VALORACIÓN")
+    p.drawString(375, y_e - 22, "CUANTITATIVA")
+
+    # Filas de la Escala
+    escala_datos = [
+        ("EXCELENTE", "DESEMPEÑO SUPERIOR", "4.8 A 5.0"),
+        ("BUENO", "DESEMPEÑO ALTO", "4.0 A 4.79"),
+        ("ACEPTABLE", "DESEMPEÑO BÁSICO", "3.0 A 3.99"),
+        ("INSUFICIENTE", "DESEMPEÑO BAJO", "1.0 A 2.99")
+    ]
+
+    y_f = y_e - 30
+    for e_pen, e_inst, e_cuant in escala_datos:
+        y_f -= 20
+        p.setFont("Helvetica", 8)
+        p.rect(130, y_f, 130, 20, fill=False, stroke=True)
+        p.drawString(135, y_f + 6, e_pen)
+
+        p.rect(260, y_f, 110, 20, fill=False, stroke=True)
+        p.drawString(265, y_f + 6, e_inst)
+
+        p.rect(370, y_f, 110, 20, fill=False, stroke=True)
+        p.drawString(375, y_f + 6, e_cuant)
+
+    # Líneas de Firmas
+    y_firmas = y_f - 180
+    p.setStrokeColor(colors.gray)
+    p.line(90, y_firmas, 270, y_firmas)
+    p.setFont("Helvetica-Bold", 8.5)
+    p.drawCentredString(180, y_firmas - 14, "Docente Titular")
+
+    p.line(340, y_firmas, 520, y_firmas)
+    p.drawCentredString(430, y_firmas - 14, "DIRECTOR")
+
+    p.showPage()
+    p.save()
+    buffer.seek(0)
+    return buffer
+
+# GENERACIÓN DE PDF EXACTO SOBRE PLANTILLA ASISTENCIA
 def generar_pdf_asistencia_oficial(grado_nombre, profesor_nombre, registros_mes, excusas_mes, estudiantes_lista, mes_nombre, sede_nombre=SEDE_DEFECTO):
     buffer = io.BytesIO()
     p = canvas.Canvas(buffer, pagesize=letter)
@@ -642,15 +825,16 @@ else:
                             st.success("Alumno eliminado.")
                             st.rerun()
 
-    # PESTAÑAS PRINCIPALES
+    # PESTAÑAS PRINCIPALES (INCLUYE PESTAÑA BOLETINES)
     st.title(f"📋 Asistente Educativo — {grado_sel_nombre if grado_sel_nombre else 'Crea un curso'}")
 
     if grado_sel_id:
-        t_docs, t_asistencia, t_estadisticas, t_notas, t_convivencia, t_lideres = st.tabs([
+        t_docs, t_asistencia, t_estadisticas, t_notas, t_boletines, t_convivencia, t_lideres = st.tabs([
             "📄 Documentos Institucionales",
             "📋 Registro de Asistencia", 
             "📊 Resumen Estadístico Mensual",
             "📝 Calificaciones Continuas",
+            "📄 Boletines Académicos",
             "⚖️ Observador de Convivencia",
             "🏆 Tabla de Líderes"
         ])
@@ -952,21 +1136,19 @@ else:
                 with col_e2:
                     mat_sel = st.selectbox("Materia / Asignatura:", MATERIAS_LISTA)
                 with col_e3:
-                    per_sel = st.selectbox("Periodo Académico:", ["Periodo 1", "Periodo 2", "Periodo 3", "Periodo 4"])
+                    per_sel = st.selectbox("Periodo Académico:", ["Primero", "Segundo", "Tercero", "Cuarto"])
 
                 st.markdown("---")
                 
-                # TITULO Y CONFIGURADOR DE PONDERACIÓN (%) EN LA PARTE DERECHA
                 c_head_izq, c_head_der = st.columns([1.6, 1.4])
                 
                 with c_head_izq:
-                    st.write(f"### ✏️ Planilla para: **{est_sel_nombre}**\n*{mat_sel} — {per_sel}*")
+                    st.write(f"### ✏️ Planilla para: **{est_sel_nombre}**\n*{mat_sel} — Periodo {per_sel}*")
                 
                 with c_head_der:
                     with st.expander("⚙️ Configurar % de Ponderación para esta Materia", expanded=False):
                         st.caption("Ajusta el peso relativo de cada dimensión. La suma debe dar exactamente 100%:")
                         
-                        # Valores guardados previamente en session_state o por defecto 25%
                         key_p0 = f"peso_0_{mat_sel}_{per_sel}"
                         key_p1 = f"peso_1_{mat_sel}_{per_sel}"
                         key_p2 = f"peso_2_{mat_sel}_{per_sel}"
@@ -997,7 +1179,6 @@ else:
                     st.session_state[key_p3]
                 ]
 
-                # Cargar notas guardadas
                 try:
                     res_notas_diarias = supabase.table("notas_diarias").select("*").eq("estudiante_id", est_sel_obj["id"]).eq("materia", mat_sel).eq("periodo", per_sel).execute()
                     notas_guardadas = res_notas_diarias.data or []
@@ -1006,7 +1187,6 @@ else:
 
                 promedios_dimensiones = []
 
-                # Renderizar las 4 dimensiones con su % de peso al lado
                 for dim_idx, dimension in enumerate(DIMENSIONES_EVALUACION):
                     peso_dim = pesos_dimensiones[dim_idx]
                     
@@ -1035,7 +1215,6 @@ else:
                                 if val_input > 0.0:
                                     val_validos.append(val_input)
 
-                        # Promedio de la Dimensión
                         prom_dim = round(sum(val_validos) / len(val_validos), 2) if val_validos else 0.0
                         promedios_dimensiones.append((prom_dim, peso_dim))
                         
@@ -1045,7 +1224,6 @@ else:
                         with col_p2:
                             st.markdown(f"**Promedio Parcial:** `{prom_dim if prom_dim > 0 else 'S/N'}` *(Aporta {round(prom_dim * (peso_dim / 100), 2)} a la nota final)*")
 
-                        # Guardar notas por dimensión
                         if st.button(f"💾 Guardar Notas de {dimension.split()[1]}", key=f"btn_save_dim_{dim_idx}"):
                             for c_num, n_val in nuevas_notas_casillas.items():
                                 if n_val > 0.0:
@@ -1063,17 +1241,15 @@ else:
 
                 st.markdown("---")
                 
-                # CÁLCULO PONDERADO TOTAL DE LA MATERIA
+                # CÁLCULO PONDERADO TOTAL
                 acumulado_ponderado = sum(p * (peso / 100) for p, peso in promedios_dimensiones if p > 0.0)
                 peso_activo = sum(peso for p, peso in promedios_dimensiones if p > 0.0)
                 
                 definitiva_materia = round(acumulado_ponderado, 2) if acumulado_ponderado > 0.0 else 0.0
 
-                c_def1, c_def2 = st.columns([2, 1])
+                c_def1, c_def2 = st.columns([1.8, 1.2])
                 with c_def1:
                     st.markdown(f"### 🏁 Nota Definitiva Ponderada ({mat_sel}): **`{definitiva_materia if definitiva_materia > 0 else 'Sin Notas'}`**")
-                    if peso_activo < 100 and peso_activo > 0:
-                        st.caption(f"ℹ️ *Nota calculada sobre el {peso_activo}% de dimensiones evaluadas.*")
                 with c_def2:
                     if st.button("📌 Sincronizar Definitiva en el Boletín del Periodo", type="primary", use_container_width=True):
                         if definitiva_materia > 0.0:
@@ -1084,10 +1260,77 @@ else:
                                 "periodo": per_sel,
                                 "profesor_id": prof["id"]
                             }).execute()
-                            st.success(f"Nota {definitiva_materia} guardada en el consolidado del {per_sel}.")
-                            st.rerun()
+                            st.success(f"¡Nota {definitiva_materia} sincronizada exitosamente en el Boletín del Periodo {per_sel}!")
+                            st.info("👉 Puedes ver e imprimir el informe actualizado en la pestaña '📄 Boletines Académicos'.")
 
-        # 5. OBSERVADOR DE CONVIVENCIA CON FILTROS AVANZADOS
+        # 5. MÓDULO DE BOLETINES ACADÉMICOS (NUEVA SECCIÓN REQUERIDA)
+        with t_boletines:
+            st.subheader("📄 Generación y Consulta de Boletines Académicos de Escuela Nueva")
+            estudiantes = obtener_estudiantes(grado_sel_id, prof["id"])
+            
+            if not estudiantes:
+                st.info("Agrega estudiantes para consultar sus boletines.")
+            else:
+                dict_e_bol = {e["nombre"]: e for e in estudiantes}
+                col_b1, col_b2, col_b3 = st.columns([1.5, 1, 1])
+                
+                with col_b1:
+                    est_bol_nombre = st.selectbox("Selecciona Estudiante para Boletín:", list(dict_e_bol.keys()))
+                    est_bol_obj = dict_e_bol[est_bol_nombre]
+                with col_b2:
+                    per_bol_sel = st.selectbox("Selecciona Periodo:", ["Primero", "Segundo", "Tercero", "Cuarto"])
+                with col_b3:
+                    sede_bol_txt = st.text_input("Sede Educativa:", value=SEDE_DEFECTO)
+
+                st.markdown("---")
+
+                # Cargar notas del boletín desde Supabase
+                res_calif = supabase.table("calificaciones").select("*").eq("estudiante_id", est_bol_obj["id"]).eq("periodo", per_bol_sel).execute()
+                data_calif = res_calif.data or []
+                
+                dict_notas_est = {c["materia"]: c["nota"] for c in data_calif}
+
+                st.write(f"### 📋 Vista Previa de Notas — **{est_bol_nombre}** *(Periodo {per_bol_sel})*")
+                
+                tabla_boletin = []
+                for m in MATERIAS_LISTA:
+                    n_val = float(dict_notas_est.get(m, 0.0))
+                    val_p, val_n = obtener_valoracion_cualitativa(n_val)
+                    tabla_boletin.append({
+                        "Área / Asignatura": m,
+                        "P.E.N. Valoración Cualitativa": val_p,
+                        "Valoración Cuantitativa": f"{n_val:.1f}" if n_val > 0 else "---",
+                        "Escala Nacional": val_n
+                    })
+
+                df_bol = pd.DataFrame(tabla_boletin)
+                st.dataframe(df_bol, use_container_width=True)
+
+                obs_boletin = st.text_area("Observaciones del Docente para este Boletín:", value="Excelente desempeño académico y gran compromiso en las actividades escolares.")
+
+                st.markdown("---")
+
+                # Botón de Generación de PDF Oficial
+                pdf_boletin_bytes = generar_pdf_boletin_oficial(
+                    estudiante_nombre=est_bol_nombre,
+                    grado_nombre=grado_sel_nombre,
+                    periodo=per_bol_sel,
+                    sede_nombre=sede_bol_txt,
+                    profesor_nombre=prof['nombre'],
+                    dict_notas=dict_notas_est,
+                    observaciones_txt=obs_boletin
+                )
+
+                st.download_button(
+                    label="📄 Descargar Boletín Académico Oficial en PDF (Formato Oficial 2 Páginas)",
+                    data=pdf_boletin_bytes,
+                    file_name=f"Boletin_Academico_{est_bol_nombre.replace(' ', '_')}_Periodo_{per_bol_sel}_2026.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                    type="primary"
+                )
+
+        # 6. OBSERVADOR DE CONVIVENCIA CON FILTROS AVANZADOS
         with t_convivencia:
             st.subheader("⚖️ Observador del Estudiante / Convivencia")
             estudiantes = obtener_estudiantes(grado_sel_id, prof["id"])
@@ -1145,7 +1388,7 @@ else:
                 else:
                     st.info("Aún no hay anotaciones en el observador.")
 
-        # 6. TABLA DE LÍDERES
+        # 7. TABLA DE LÍDERES
         with t_lideres:
             st.subheader("🏆 Clasificación General por Puntos y Rachas")
             estudiantes = obtener_estudiantes(grado_sel_id, prof["id"])
