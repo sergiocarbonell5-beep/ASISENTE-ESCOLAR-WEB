@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA (VERSION BOLETÍN 100% IDÉNTICO)
+SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA
 =======================================================================================
-- Hoja 1 del Boletín ajustada idénticamente a la plantilla oficial (escudo, líneas punteadas, logos, etc.)
-- Autoguardado directo en Supabase y sincronización fluida con la vista previa y descarga del PDF.
+- Generación de Boletines Oficiales en PDF (2 Páginas con Escudo y Bandera).
+- Autoguardado e integración continua con Supabase.
+- PDF y Excel de Control de Asistencia.
+- Dashboard Estadístico, Observador de Convivencia y Tabla de Líderes.
 """
 
 import os
@@ -272,10 +274,10 @@ def generar_pdf_boletin_oficial(estudiante_nombre, grado_nombre, periodo, sede_n
     p = canvas.Canvas(buffer, pagesize=letter)
     width, height = letter # 612 x 792 pt
 
-    # 1. ESCUDO INSTITUCIONAL SUPERIOR
+    # 1. ESCUDO C.E.R. SIRAVITA (SUPERIOR CENTRO)
     ruta_escudo = "escudo_siravita.png"
     if os.path.exists(ruta_escudo):
-        p.drawImage(ruta_escudo, (width / 2.0) - 25, height - 60, width=50, height=50, mask='auto')
+        p.drawImage(ruta_escudo, (width / 2.0) - 25, height - 62, width=50, height=50, mask='auto')
 
     # 2. ENCABEZADO TEXTO OFICIAL
     p.setFillColor(colors.black)
@@ -302,14 +304,14 @@ def generar_pdf_boletin_oficial(estudiante_nombre, grado_nombre, periodo, sede_n
     p.setFont("Helvetica-Bold", 6)
     p.drawCentredString(width / 2.0, y_verde + 3, "RESOLUCION DE APROBACION DE ESTUDIO 8: 008708-24-10-2024")
 
-    # 4. LOGO INFORMES ACADÉMICOS
-    y_logo = y_verde - 42
-    ruta_logo = "logo_informes.png"
-    if os.path.exists(ruta_logo):
-        p.drawImage(ruta_logo, (width / 2.0) - 30, y_logo, width=60, height=38, mask='auto')
+    # 4. BANDERA DE COLOMBIA (ILUSTRACIÓN INTERMEDIA)
+    y_bandera = y_verde - 42
+    ruta_bandera = "bandera_colombia.png"
+    if os.path.exists(ruta_bandera):
+        p.drawImage(ruta_bandera, (width / 2.0) - 25, y_bandera, width=50, height=38, mask='auto')
 
     # 5. TÍTULO DEL BOLETÍN
-    y_titulo = y_logo - 16
+    y_titulo = y_bandera - 16
     p.setFillColor(colors.black)
     p.setFont("Helvetica", 8.5)
     p.drawCentredString(width / 2.0, y_titulo, "Boletín Académico Escuela Nueva de Básica Primaria")
@@ -400,7 +402,9 @@ def generar_pdf_boletin_oficial(estudiante_nombre, grado_nombre, periodo, sede_n
 
     p.showPage()
 
+    # =========================================================================
     # HOJA 2: ESCALA Y FIRMAS
+    # =========================================================================
     y_e = height - 120
     p.setFont("Helvetica-BoldOblique", 11)
     p.drawCentredString(width / 2.0, y_e + 20, "ESCALA DE VALORACION INSTITUCIONAL")
@@ -1261,7 +1265,6 @@ else:
                 acumulado_ponderado = sum(p * (peso / 100) for p, peso in promedios_dimensiones if p > 0.0)
                 definitiva_materia = round(acumulado_ponderado, 2) if acumulado_ponderado > 0.0 else 0.0
 
-                # AUTOSINCRONIZACIÓN AUTOMÁTICA EN SEGUNDO PLANO
                 if definitiva_materia > 0.0:
                     try:
                         supabase.table("calificaciones").upsert({
@@ -1298,12 +1301,10 @@ else:
 
                 st.markdown("---")
 
-                # Cargar calificaciones desde Supabase
                 res_calif = supabase.table("calificaciones").select("*").eq("estudiante_id", est_bol_obj["id"]).eq("periodo", per_bol_sel).execute()
                 data_calif = res_calif.data or []
                 dict_notas_est = {c["materia"]: c["nota"] for c in data_calif}
 
-                # Cálculo dinámico desde notas diarias si falta alguna materia
                 try:
                     res_diarias_todas = supabase.table("notas_diarias").select("*").eq("estudiante_id", est_bol_obj["id"]).eq("periodo", per_bol_sel).execute()
                     diarias_todas = res_diarias_todas.data or []
