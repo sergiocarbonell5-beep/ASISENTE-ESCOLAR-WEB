@@ -3,3 +3,6 @@ pandas
 supabase
 openpyxl
 reportlab
+openpyxl
+python-docx
+pypdf
