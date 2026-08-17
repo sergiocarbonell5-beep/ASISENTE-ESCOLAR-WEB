@@ -3,6 +3,7 @@
 SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA
 =======================================================================================
 - Generación de Boletines Oficiales en PDF (2 Páginas con Escudo y Bandera).
+- Adaptador Automático de Guías de Aprendizaje (PDF / Word / HTML a Escuela Nueva).
 - Autoguardado e integración continua con Supabase.
 - PDF y Excel de Control de Asistencia.
 - Dashboard Estadístico, Observador de Convivencia y Tabla de Líderes.
@@ -24,10 +25,13 @@ import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 
-# PDF con ReportLab
+# PDF y Word
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from reportlab.lib import colors
+import docx
+from docx.shared import Pt, Inches
+from pypdf import PdfReader
 
 from supabase import create_client, Client
 
@@ -402,9 +406,7 @@ def generar_pdf_boletin_oficial(estudiante_nombre, grado_nombre, periodo, sede_n
 
     p.showPage()
 
-    # =========================================================================
     # HOJA 2: ESCALA Y FIRMAS
-    # =========================================================================
     y_e = height - 120
     p.setFont("Helvetica-BoldOblique", 11)
     p.drawCentredString(width / 2.0, y_e + 20, "ESCALA DE VALORACION INSTITUCIONAL")
@@ -694,6 +696,160 @@ def generar_excel_asistencia_oficial(grado_nombre, profesor_nombre, registros_me
     return output
 
 # ================================================================
+# LÓGICA DEL ADAPTADOR DE GUÍAS DE APRENDIZAJE
+# ================================================================
+def extraer_texto_archivo(archivo_subido, tipo_archivo):
+    texto = ""
+    try:
+        if tipo_archivo == "pdf":
+            reader = PdfReader(archivo_subido)
+            for page in reader.pages:
+                t = page.extract_text()
+                if t: texto += t + "\n"
+        elif tipo_archivo == "docx":
+            doc = docx.Document(archivo_subido)
+            for p in doc.paragraphs:
+                texto += p.text + "\n"
+        elif tipo_archivo == "txt":
+            texto = archivo_subido.getvalue().decode("utf-8")
+    except Exception as e:
+        st.error(f"Error al leer el archivo: {e}")
+    return texto.strip()
+
+def adaptar_contenido_escuela_nueva(texto_original, eje_tematico):
+    # Algoritmo de estructuración pedagógica en los 4 Momentos de Escuela Nueva
+    lineas = [l.strip() for l in texto_original.split("\n") if l.strip()]
+    total = len(lineas)
+    
+    if total == 0:
+        lineas = ["Contenido genérico sobre el eje temático: " + eje_tematico]
+        total = 1
+
+    q1, q2, q3 = total // 4, total // 2, (3 * total) // 4
+    
+    momento_a = "\n".join(lineas[:q1]) if q1 > 0 else "• Responde en tu cuaderno: ¿Qué sabes acerca de " + eje_tematico + "?\n• Observa las situaciones cotidianas relacionadas con el tema y comparte tus ideas."
+    momento_b = "\n".join(lineas[q1:q2]) if q2 > q1 else "• Concepto clave: " + eje_tematico + ".\n• Lee atentamente la explicación de la guía y consigna los puntos principales en tu cuaderno de trabajo."
+    momento_c = "\n".join(lineas[q2:q3]) if q3 > q2 else "• Desarrolla las actividades de ejercitación individuales y en parejas.\n• Resuelve los problemas prácticos propuestos para afianzar el conocimiento."
+    momento_d = "\n".join(lineas[q3:]) if total > q3 else "• Demuestra lo aprendido resolviendo la evaluación final.\n• Aplica lo aprendido con ayuda de tu familia en la casa."
+
+    return {
+        "A": momento_a,
+        "B": momento_b,
+        "C": momento_c,
+        "D": momento_d
+    }
+
+def generar_pdf_guia_adaptada(materia, eje_tematico, momentos, profesor_nombre, grado_nombre):
+    buffer = io.BytesIO()
+    p = canvas.Canvas(buffer, pagesize=letter)
+    width, height = letter # 612 x 792 pt
+
+    # Encabezado Oficial
+    p.setFont("Helvetica-Bold", 9)
+    p.drawCentredString(width / 2.0, height - 35, "CENTRO EDUCATIVO RURAL SIRAVITA - ARBOLEDAS")
+    p.setFont("Helvetica-Bold", 11)
+    p.setFillColor(colors.HexColor("#008037"))
+    p.drawCentredString(width / 2.0, height - 50, f"GUÍA DE APRENDIZAJE DE ESCUELA NUEVA — {materia.upper()}")
+    
+    p.setFillColor(colors.black)
+    p.setFont("Helvetica", 8.5)
+    p.drawString(40, height - 70, f"Grado: {grado_nombre}   |   Docente: {profesor_nombre}   |   Eje Temático: {eje_tematico}")
+    p.line(40, height - 75, width - 40, height - 75)
+
+    y_pos = height - 95
+    secciones = [
+        ("MOMENTO A: Vivencia / Saberes Previos", momentos["A"], "#1B432C"),
+        ("MOMENTO B: Fundamentación Teórica", momentos["B"], "#00A2E8"),
+        ("MOMENTO C: Ejercitación y Aplicación", momentos["C"], "#FFC90E"),
+        ("MOMENTO D: Evaluación y Extensión", momentos["D"], "#E65100")
+    ]
+
+    for tit, cont, col_hex in secciones:
+        if y_pos < 100:
+            p.showPage()
+            y_pos = height - 50
+
+        p.setFillColor(colors.HexColor(col_hex))
+        p.rect(40, y_pos - 18, width - 80, 18, fill=True, stroke=False)
+        p.setFillColor(colors.white if col_hex != "#FFC90E" else colors.black)
+        p.setFont("Helvetica-Bold", 9)
+        p.drawString(48, y_pos - 13, tit)
+
+        y_pos -= 30
+        p.setFillColor(colors.black)
+        p.setFont("Helvetica", 8)
+        
+        for lin in cont.split("\n")[:12]:
+            if y_pos < 50:
+                p.showPage()
+                y_pos = height - 50
+            p.drawString(48, y_pos, lin[:100])
+            y_pos -= 12
+        y_pos -= 10
+
+    p.showPage()
+    p.save()
+    buffer.seek(0)
+    return buffer
+
+def generar_docx_guia_adaptada(materia, eje_tematico, momentos, profesor_nombre, grado_nombre):
+    doc = docx.Document()
+    
+    doc.add_heading('CENTRO EDUCATIVO RURAL SIRAVITA', level=1)
+    p = doc.add_paragraph()
+    p.add_run(f"GUÍA DE APRENDIZAJE ESCUELA NUEVA — {materia.upper()}\n").bold = True
+    p.add_run(f"Grado: {grado_nombre} | Docente: {profesor_nombre} | Eje Temático: {eje_tematico}\n")
+
+    secciones = [
+        ("MOMENTO A: Vivencia / Saberes Previos", momentos["A"]),
+        ("MOMENTO B: Fundamentación Teórica", momentos["B"]),
+        ("MOMENTO C: Ejercitación y Aplicación", momentos["C"]),
+        ("MOMENTO D: Evaluación y Extensión", momentos["D"])
+    ]
+
+    for tit, cont in secciones:
+        doc.add_heading(tit, level=2)
+        doc.add_paragraph(cont)
+
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+def generar_html_guia_adaptada(materia, eje_tematico, momentos, profesor_nombre, grado_nombre):
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>Guía {materia}</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 30px; line-height: 1.6; }}
+            .header {{ text-align: center; border-bottom: 2px solid #008037; padding-bottom: 10px; }}
+            .momento {{ background: #f4f4f4; padding: 10px; border-left: 5px solid #008037; margin-top: 15px; font-weight: bold; }}
+            .contenido {{ padding: 10px; background: #fff; border: 1px solid #ddd; }}
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h2>CENTRO EDUCATIVO RURAL SIRAVITA</h2>
+            <h3>GUÍA DE APRENDIZAJE ESCUELA NUEVA — {materia.upper()}</h3>
+            <p><strong>Grado:</strong> {grado_nombre} | <strong>Docente:</strong> {profesor_nombre} | <strong>Eje:</strong> {eje_tematico}</p>
+        </div>
+        <div class="momento">MOMENTO A: Vivencia / Saberes Previos</div>
+        <div class="contenido"><pre>{momentos['A']}</pre></div>
+        <div class="momento">MOMENTO B: Fundamentación Teórica</div>
+        <div class="contenido"><pre>{momentos['B']}</pre></div>
+        <div class="momento">MOMENTO C: Ejercitación y Aplicación</div>
+        <div class="contenido"><pre>{momentos['C']}</pre></div>
+        <div class="momento">MOMENTO D: Evaluación y Extensión</div>
+        <div class="contenido"><pre>{momentos['D']}</pre></div>
+    </body>
+    </html>
+    """
+    return html
+
+# ================================================================
 # VENTANA CELEBRACIÓN CON AUDIO
 # ================================================================
 @st.dialog("🎉 ¡Asistencia Registrada!", width="large")
@@ -860,12 +1016,13 @@ else:
     st.title(f"📋 Asistente Educativo — {grado_sel_nombre if grado_sel_nombre else 'Crea un curso'}")
 
     if grado_sel_id:
-        t_docs, t_asistencia, t_estadisticas, t_notas, t_boletines, t_convivencia, t_lideres = st.tabs([
+        t_docs, t_asistencia, t_estadisticas, t_notas, t_boletines, t_adaptador, t_convivencia, t_lideres = st.tabs([
             "📄 Documentos Institucionales",
             "📋 Registro de Asistencia", 
             "📊 Resumen Estadístico Mensual",
             "📝 Calificaciones Continuas",
             "📄 Boletines Académicos",
+            "🧩 Adaptador de Guías",
             "⚖️ Observador de Convivencia",
             "🏆 Tabla de Líderes"
         ])
@@ -1371,7 +1528,109 @@ else:
                     type="primary"
                 )
 
-        # 6. OBSERVADOR DE CONVIVENCIA CON FILTROS AVANZADOS
+        # 6. ADAPTADOR DE GUÍAS DE APRENDIZAJE
+        with t_adaptador:
+            st.subheader("🧩 Adaptador Automático de Guías a Escuela Nueva")
+            st.caption("Carga tus guías tradicionales (PDF, Word o Texto/HTML) y transfórmalas a la secuencia didáctica de 4 Momentos.")
+
+            col_ad1, col_ad2 = st.columns(2)
+
+            with col_ad1:
+                st.markdown("#### 1️⃣ Ejes Temáticos y Parámetros")
+                mat_guia = st.selectbox("Asignatura de la Guía:", MATERIAS_LISTA, key="mat_guia_sel")
+                
+                archivo_ejes = st.file_uploader("Subir Documento de Ejes Temáticos (PDF/Word/TXT):", type=["pdf", "docx", "txt"], key="up_ejes")
+                
+                if archivo_ejes:
+                    tipo_e = archivo_ejes.name.split(".")[-1].lower()
+                    eje_txt_extraido = extraer_texto_archivo(archivo_ejes, tipo_e)
+                    st.success("Eje temático cargado desde el archivo.")
+                else:
+                    eje_txt_extraido = ""
+
+                eje_tematico_final = st.text_area("O especifica directamente el Eje Temático:", value=eje_txt_extraido if eje_txt_extraido else "La Adición, Términos y Propiedades de la Suma", height=100)
+
+            with col_ad2:
+                st.markdown("#### 2️⃣ Guía Original a Transformar")
+                origen_tipo = st.radio("Formato de origen:", ["Archivo PDF (.pdf)", "Documento Word (.docx)", "Texto plano / HTML"], horizontal=True)
+
+                texto_guia_original = ""
+                
+                if origen_tipo == "Archivo PDF (.pdf)":
+                    f_pdf = st.file_uploader("Subir Guía en PDF:", type=["pdf"], key="up_pdf_g")
+                    if f_pdf:
+                        texto_guia_original = extraer_texto_archivo(f_pdf, "pdf")
+                elif origen_tipo == "Documento Word (.docx)":
+                    f_doc = st.file_uploader("Subir Guía en Word:", type=["docx"], key="up_doc_g")
+                    if f_doc:
+                        texto_guia_original = extraer_texto_archivo(f_doc, "docx")
+                else:
+                    texto_guia_original = st.text_area("Pega aquí el texto plano o código HTML de la guía:", height=150)
+
+            st.markdown("---")
+            st.markdown("#### 3️⃣ Formato de Salida y Generación")
+            
+            formato_salida = st.selectbox("Selecciona el formato en el que deseas exportar la guía adaptada:", ["Documento PDF (.pdf)", "Documento Word (.docx)", "Código HTML / Página Web"])
+
+            if st.button("🚀 Transformar y Adaptar Guía a Escuela Nueva", type="primary", use_container_width=True):
+                if not texto_guia_original.strip():
+                    st.warning("Debes proporcionar el contenido o archivo de la guía original para transformar.")
+                else:
+                    with st.spinner("Transformando y reestructurando la guía en los 4 Momentos de Escuela Nueva..."):
+                        momentos_res = adaptar_contenido_escuela_nueva(texto_guia_original, eje_tematico_final)
+                        
+                        st.success("¡Guía reestructurada exitosamente!")
+
+                        with st.expander("👁️ Vista Previa de la Guía Adaptada", expanded=True):
+                            st.markdown(f"### **GUÍA DE APRENDIZAJE: {mat_guia.upper()}**")
+                            st.caption(f"Eje Temático: {eje_tematico_final}")
+                            
+                            st.markdown("---")
+                            st.markdown("#### **🟢 MOMENTO A: Vivencia / Saberes Previos**")
+                            st.text(momentos_res["A"])
+
+                            st.markdown("#### **🔵 MOMENTO B: Fundamentación Teórica**")
+                            st.text(momentos_res["B"])
+
+                            st.markdown("#### **🟡 MOMENTO C: Ejercitación y Aplicación**")
+                            st.text(momentos_res["C"])
+
+                            st.markdown("#### **🟠 MOMENTO D: Evaluación y Extensión**")
+                            st.text(momentos_res["D"])
+
+                        st.markdown("---")
+
+                        # Opciones de Descarga
+                        if formato_salida == "Documento PDF (.pdf)":
+                            pdf_g_bytes = generar_pdf_guia_adaptada(mat_guia, eje_tematico_final, momentos_res, prof["nombre"], grado_sel_nombre)
+                            st.download_button(
+                                label="📄 Descargar Guía Adaptada en PDF",
+                                data=pdf_g_bytes,
+                                file_name=f"Guia_Escuela_Nueva_{mat_guia.replace(' ', '_')}_{grado_sel_nombre}.pdf",
+                                mime="application/pdf",
+                                use_container_width=True
+                            )
+                        elif formato_salida == "Documento Word (.docx)":
+                            docx_g_bytes = generar_docx_guia_adaptada(mat_guia, eje_tematico_final, momentos_res, prof["nombre"], grado_sel_nombre)
+                            st.download_button(
+                                label="📝 Descargar Guía Adaptada en Word (.docx)",
+                                data=docx_g_bytes,
+                                file_name=f"Guia_Escuela_Nueva_{mat_guia.replace(' ', '_')}_{grado_sel_nombre}.docx",
+                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                use_container_width=True
+                            )
+                        else:
+                            html_str = generar_html_guia_adaptada(mat_guia, eje_tematico_final, momentos_res, prof["nombre"], grado_sel_nombre)
+                            st.download_button(
+                                label="🌐 Descargar Guía Adaptada en HTML",
+                                data=html_str.encode("utf-8"),
+                                file_name=f"Guia_Escuela_Nueva_{mat_guia.replace(' ', '_')}_{grado_sel_nombre}.html",
+                                mime="text/html",
+                                use_container_width=True
+                            )
+                            st.code(html_str, language="html")
+
+        # 7. OBSERVADOR DE CONVIVENCIA CON FILTROS AVANZADOS
         with t_convivencia:
             st.subheader("⚖️ Observador del Estudiante / Convivencia")
             estudiantes = obtener_estudiantes(grado_sel_id, prof["id"])
@@ -1429,7 +1688,7 @@ else:
                 else:
                     st.info("Aún no hay anotaciones en el observador.")
 
-        # 7. TABLA DE LÍDERES
+        # 8. TABLA DE LÍDERES
         with t_lideres:
             st.subheader("🏆 Clasificación General por Puntos y Rachas")
             estudiantes = obtener_estudiantes(grado_sel_id, prof["id"])
