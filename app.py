@@ -2,13 +2,15 @@
 """
 SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA
 =======================================================================================
-- Observador de Convivencia posicionado antes de Boletines Académicos.
-- Carga Ultra Rápida Dinámica.
-- Evaluación Continua con Nombre y Fecha por Actividad (C1 - C10).
-- Generación de Boletines Oficiales en PDF (2 Páginas con Escudo y Bandera).
-- Adaptador Automático de Guías de Aprendizaje (PDF / Word / HTML a Escuela Nueva).
-- Control de Asistencia en PDF y Excel.
-- Dashboard Estadístico y Tabla de Líderes.
+- Módulo 0: Consolidado General e Informes Directivos con Exportación PDF y Excel.
+- Módulo 1: Documentos Institucionales en Nube.
+- Módulo 2: Registro de Asistencia Oficial (PDF/Excel).
+- Módulo 3: Resumen Estadístico Mensual.
+- Módulo 4: Calificaciones Continuas (C1 - C10 con Nombre y Fecha).
+- Módulo 5: Observador de Convivencia.
+- Módulo 6: Boletines Académicos Oficiales (Escudo, Bandera, DANE y Decreto).
+- Módulo 7: Adaptador Automático de Guías a Escuela Nueva (4 Momentos).
+- Módulo 8: Tabla de Líderes y Gamificación.
 """
 
 import os
@@ -281,8 +283,230 @@ def crear_link_whatsapp(telefono, nombre_estudiante, nombre_profesor):
     return f"https://wa.me/{num_limpio}?text={msg_encoded}"
 
 # ================================================================
-# GENERACIÓN DE PDF DE BOLETÍN ACADÉMICO OFICIAL
+# GENERACIÓN DE PDF INFORME CONSOLIDADO GENERAL
 # ================================================================
+def generar_pdf_consolidado_general(profesor_nombre, tot_est, tot_grados, tot_asist, tot_excusas, tot_obs, prom_gen, list_grados, df_mats):
+    buffer = io.BytesIO()
+    p = canvas.Canvas(buffer, pagesize=letter)
+    width, height = letter
+
+    # ESCUDO
+    ruta_escudo = "escudo_siravita.png"
+    if os.path.exists(ruta_escudo):
+        p.drawImage(ruta_escudo, (width / 2.0) - 25, height - 60, width=50, height=50, mask='auto')
+
+    p.setFillColor(colors.black)
+    p.setFont("Helvetica-Bold", 8.5)
+    y_hdr = height - 68
+    p.drawCentredString(width / 2.0, y_hdr, "REPUBLICA DE COLOMBIA")
+    p.drawCentredString(width / 2.0, y_hdr - 10, "CENTRO EDUCATIVO RURAL SIRAVITA - ARBOLEDAS")
+    p.drawCentredString(width / 2.0, y_hdr - 20, "INFORME DIRECTIVO - CONSOLIDADO GENERAL ACADÉMICO Y DE ASISTENCIA")
+
+    p.setStrokeColor(colors.HexColor("#008037"))
+    p.setLineWidth(1.5)
+    p.line(40, y_hdr - 28, width - 40, y_hdr - 28)
+
+    p.setFont("Helvetica", 8)
+    p.drawString(40, y_hdr - 42, f"Docente Encargado: {profesor_nombre}   |   Fecha de Reporte: {datetime.date.today().strftime('%d/%m/%Y')}   |   Año Lectivo: 2026")
+
+    # CUADRO MÉTRICAS GLOBALES
+    y_m = y_hdr - 95
+    p.setFillColor(colors.HexColor("#F4F6F7"))
+    p.rect(40, y_m, width - 80, 45, fill=True, stroke=True)
+
+    p.setFillColor(colors.HexColor("#008037"))
+    p.setFont("Helvetica-Bold", 8.5)
+    p.drawString(50, y_m + 30, f"ESTUDIANTES: {tot_est}")
+    p.drawString(160, y_m + 30, f"GRADOS: {tot_grados}")
+    p.drawString(250, y_m + 30, f"ASISTENCIAS: {tot_asist}")
+    p.drawString(360, y_m + 30, f"EXCUSAS/OBS: {tot_excusas}/{tot_obs}")
+    
+    val_p_g, val_n_g = obtener_valoracion_cualitativa(prom_gen)
+    p.drawString(480, y_m + 30, f"PROMEDIO: {prom_gen:.2f}")
+
+    p.setFillColor(colors.black)
+    p.setFont("Helvetica-Oblique", 7.5)
+    p.drawString(50, y_m + 12, f"Estado Institucional Global: {val_p_g} ({val_n_g})")
+
+    # DESGLOSE POR GRADOS
+    y_g = y_m - 25
+    p.setFont("Helvetica-Bold", 9)
+    p.setFillColor(colors.HexColor("#1B432C"))
+    p.drawString(40, y_g, "1. RESUMEN Y CONSOLIDADO POR CURSOS / GRADOS")
+
+    y_g -= 15
+    h_th = 16
+    p.setFillColor(colors.HexColor("#008037"))
+    p.rect(40, y_g - h_th, width - 80, h_th, fill=True, stroke=True)
+    
+    p.setFillColor(colors.white)
+    p.setFont("Helvetica-Bold", 7.5)
+    p.drawString(45, y_g - 11, "Grado / Curso")
+    p.drawString(180, y_g - 11, "N° Alumnos")
+    p.drawString(260, y_g - 11, "Asistencias")
+    p.drawString(340, y_g - 11, "Anotaciones Convivencia")
+    p.drawString(480, y_g - 11, "Promedio")
+
+    y_row = y_g - h_th
+    p.setFillColor(colors.black)
+    p.setFont("Helvetica", 7.5)
+
+    for g_info in list_grados:
+        y_row -= 15
+        if y_row < 60:
+            p.showPage()
+            y_row = height - 50
+
+        p.rect(40, y_row, width - 80, 15, fill=False, stroke=True)
+        p.drawString(45, y_row + 4, str(g_info['nombre'])[:25])
+        p.drawString(180, y_row + 4, str(g_info['alumnos']))
+        p.drawString(260, y_row + 4, str(g_info['asistencias']))
+        p.drawString(340, y_row + 4, str(g_info['observaciones']))
+        p.drawString(480, y_row + 4, f"{g_info['promedio']:.2f}")
+
+    # RENDIMIENTO POR MATERIAS
+    y_mats = y_row - 30
+    if y_mats < 150:
+        p.showPage()
+        y_mats = height - 60
+
+    p.setFont("Helvetica-Bold", 9)
+    p.setFillColor(colors.HexColor("#1B432C"))
+    p.drawString(40, y_mats, "2. RENDIMIENTO ACADÉMICO GLOBAL POR MATERIA")
+
+    y_mats -= 15
+    p.setFillColor(colors.HexColor("#008037"))
+    p.rect(40, y_mats - h_th, width - 80, h_th, fill=True, stroke=True)
+
+    p.setFillColor(colors.white)
+    p.setFont("Helvetica-Bold", 7.5)
+    p.drawString(45, y_mats - 11, "Asignatura / Área")
+    p.drawString(250, y_mats - 11, "Promedio")
+    p.drawString(330, y_mats - 11, "Valoración Escuela Nueva")
+    p.drawString(480, y_mats - 11, "Actividades (C1-C10)")
+
+    y_r_m = y_mats - h_th
+    p.setFillColor(colors.black)
+
+    for _, row in df_mats.iterrows():
+        y_r_m -= 14
+        if y_r_m < 50:
+            p.showPage()
+            y_r_m = height - 50
+
+        p.rect(40, y_r_m, width - 80, 14, fill=False, stroke=True)
+        p.setFont("Helvetica", 7)
+        p.drawString(45, y_r_m + 3, str(row['Asignatura / Área'])[:40])
+        p.drawString(250, y_r_m + 3, str(row['Promedio General']))
+        p.drawString(330, y_r_m + 3, str(row['Valoración Escuela Nueva']))
+        p.drawString(480, y_r_m + 3, str(row['Actividades Calificadas (C1-C10)']))
+
+    p.showPage()
+    p.save()
+    buffer.seek(0)
+    return buffer
+
+# GENERACIÓN DE EXCEL CONSOLIDADO GENERAL
+def generar_excel_consolidado_general(profesor_nombre, tot_est, tot_grados, tot_asist, tot_excusas, tot_obs, prom_gen, list_grados, df_mats):
+    wb = openpyxl.Workbook()
+    
+    # HOJA 1: RESUMEN GENERAL Y POR GRADOS
+    ws1 = wb.active
+    ws1.title = "Consolidado por Grados"
+    ws1.views.sheetView[0].showGridLines = True
+
+    VERDE_OSCURO = "004D25"
+    VERDE_HEADER = "1B432C"
+    
+    fill_header = PatternFill(start_color=VERDE_HEADER, end_color=VERDE_HEADER, fill_type="solid")
+    font_bold_white = Font(name="Calibri", size=10, bold=True, color="FFFFFF")
+    font_sub = Font(name="Calibri", size=11, bold=True, color="000000")
+    
+    ws1.merge_cells("A1:E1")
+    ws1["A1"] = "CENTRO EDUCATIVO RURAL SIRAVITA - INFORME DIRECTIVO CONSOLIDADO"
+    ws1["A1"].font = Font(name="Calibri", size=12, bold=True, color=VERDE_OSCURO)
+    ws1["A1"].alignment = Alignment(horizontal="center")
+
+    ws1.merge_cells("A2:E2")
+    ws1["A2"] = f"Docente: {profesor_nombre}  |  Fecha: {datetime.date.today().strftime('%d/%m/%Y')}  |  Año: 2026"
+    ws1["A2"].alignment = Alignment(horizontal="center")
+
+    ws1.cell(row=4, column=1, value="MÉTRICA GLOBAL").font = font_sub
+    ws1.cell(row=4, column=2, value="VALOR").font = font_sub
+
+    metricas = [
+        ("Total Estudiantes", tot_est),
+        ("Total Grados", tot_grados),
+        ("Total Asistencias", tot_asist),
+        ("Excusas / Justificaciones", tot_excusas),
+        ("Anotaciones Convivencia", tot_obs),
+        ("Promedio Académico Global", f"{prom_gen:.2f}")
+    ]
+
+    r_idx = 5
+    for m_nom, m_val in metricas:
+        ws1.cell(row=r_idx, column=1, value=m_nom)
+        ws1.cell(row=r_idx, column=2, value=m_val)
+        r_idx += 1
+
+    r_idx += 2
+    ws1.cell(row=r_idx, column=1, value="DESGLOSE POR CURSOS / GRADOS").font = Font(name="Calibri", size=11, bold=True, color=VERDE_OSCURO)
+    r_idx += 1
+
+    headers_g = ["Grado / Curso", "N° Alumnos", "Asistencias", "Anotaciones Convivencia", "Promedio Académico"]
+    for c_i, h_txt in enumerate(headers_g, start=1):
+        cell = ws1.cell(row=r_idx, column=c_i, value=h_txt)
+        cell.font = font_bold_white
+        cell.fill = fill_header
+
+    r_idx += 1
+    for g_info in list_grados:
+        ws1.cell(row=r_idx, column=1, value=g_info['nombre'])
+        ws1.cell(row=r_idx, column=2, value=g_info['alumnos'])
+        ws1.cell(row=r_idx, column=3, value=g_info['asistencias'])
+        ws1.cell(row=r_idx, column=4, value=g_info['observaciones'])
+        ws1.cell(row=r_idx, column=5, value=round(g_info['promedio'], 2))
+        r_idx += 1
+
+    ws1.column_dimensions['A'].width = 30
+    ws1.column_dimensions['B'].width = 18
+    ws1.column_dimensions['C'].width = 18
+    ws1.column_dimensions['D'].width = 25
+    ws1.column_dimensions['E'].width = 20
+
+    # HOJA 2: CONSOLIDADO POR MATERIAS
+    ws2 = wb.create_sheet(title="Consolidado por Materias")
+    ws2.views.sheetView[0].showGridLines = True
+
+    headers_m = ["Asignatura / Área", "Promedio General", "Valoración Escuela Nueva", "Escala Nacional", "Actividades Calificadas (C1-C10)", "Documentos en Nube"]
+    for c_i, h_txt in enumerate(headers_m, start=1):
+        cell = ws2.cell(row=1, column=c_i, value=h_txt)
+        cell.font = font_bold_white
+        cell.fill = fill_header
+
+    r_m = 2
+    for _, row in df_mats.iterrows():
+        ws2.cell(row=r_m, column=1, value=row['Asignatura / Área'])
+        ws2.cell(row=r_m, column=2, value=row['Promedio General'])
+        ws2.cell(row=r_m, column=3, value=row['Valoración Escuela Nueva'])
+        ws2.cell(row=r_m, column=4, value=row['Escala Nacional'])
+        ws2.cell(row=r_m, column=5, value=row['Actividades Calificadas (C1-C10)'])
+        ws2.cell(row=r_m, column=6, value=row['Documentos en Nube'])
+        r_m += 1
+
+    ws2.column_dimensions['A'].width = 45
+    ws2.column_dimensions['B'].width = 18
+    ws2.column_dimensions['C'].width = 28
+    ws2.column_dimensions['D'].width = 18
+    ws2.column_dimensions['E'].width = 30
+    ws2.column_dimensions['F'].width = 22
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output
+
+# GENERACIÓN DE PDF DE BOLETÍN ACADÉMICO OFICIAL
 def generar_pdf_boletin_oficial(estudiante_nombre, grado_nombre, periodo, sede_nombre, profesor_nombre, dict_notas, observaciones_txt):
     buffer = io.BytesIO()
     p = canvas.Canvas(buffer, pagesize=letter)
@@ -547,7 +771,7 @@ def generar_pdf_asistencia_oficial(grado_nombre, profesor_nombre, registros_mes,
     buffer.seek(0)
     return buffer
 
-# GENERACIÓN EXCEL
+# GENERACIÓN EXCEL ASISTENCIA
 def generar_excel_asistencia_oficial(grado_nombre, profesor_nombre, registros_mes, excusas_mes, estudiantes_lista, mes_nombre, sede_nombre=SEDE_DEFECTO):
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -1018,7 +1242,8 @@ else:
     st.title(f"📋 Asistente Educativo — {grado_sel_nombre if grado_sel_nombre else 'Crea un curso'}")
 
     if grado_sel_id:
-        t_docs, t_asistencia, t_estadisticas, t_notas, t_convivencia, t_boletines, t_adaptador, t_lideres = st.tabs([
+        t_consolidado, t_docs, t_asistencia, t_estadisticas, t_notas, t_convivencia, t_boletines, t_adaptador, t_lideres = st.tabs([
+            "🌐 Consolidado General",
             "📄 Documentos Institucionales",
             "📋 Registro de Asistencia", 
             "📊 Resumen Estadístico Mensual",
@@ -1028,6 +1253,194 @@ else:
             "🧩 Adaptador de Guías",
             "🏆 Tabla de Líderes"
         ])
+
+        # 0. CONSOLIDADO GENERAL E INFORMES DETALLADOS
+        with t_consolidado:
+            st.subheader("🌐 Consolidado General e Informe Directivo Institucional")
+            st.caption("Visión global, diagnósticos integrales y desgloses detallados por grado y por asignatura.")
+
+            try:
+                res_grados_all = supabase.table("grados").select("*").eq("profesor_id", prof["id"]).execute().data or []
+                res_est_all = supabase.table("estudiantes").select("*").eq("profesor_id", prof["id"]).eq("activo", 1).execute().data or []
+                res_reg_all = supabase.table("registros").select("*").eq("profesor_id", prof["id"]).execute().data or []
+                res_conv_all = supabase.table("convivencia").select("*").eq("profesor_id", prof["id"]).execute().data or []
+                res_calif_all = supabase.table("calificaciones").select("*").eq("profesor_id", prof["id"]).execute().data or []
+                res_notas_diarias_all = supabase.table("notas_diarias").select("*").eq("profesor_id", prof["id"]).execute().data or []
+                res_docs_all = supabase.table("documentos").select("*").eq("profesor_id", prof["id"]).execute().data or []
+            except Exception as err:
+                st.error(f"Error al cargar datos globales: {err}")
+                res_grados_all, res_est_all, res_reg_all, res_conv_all, res_calif_all, res_notas_diarias_all, res_docs_all = [], [], [], [], [], [], []
+
+            if not res_est_all:
+                st.info("Aún no hay suficientes datos registrados en la plataforma para construir el consolidado general.")
+            else:
+                tot_est = len(res_est_all)
+                tot_grados = len(res_grados_all)
+                tot_asistencias = len(res_reg_all)
+                tot_excusas = len([c for c in res_conv_all if c.get("tipo") == "Excusa / Justificación"])
+                tot_observaciones = len(res_conv_all) - tot_excusas
+                
+                promedio_general_notas = round(pd.DataFrame(res_calif_all)["nota"].mean(), 2) if res_calif_all else 0.0
+
+                st.markdown("### 📊 1. Resumen Ejecutivo Institucional")
+                
+                c1, c2, c3, c4, c5 = st.columns(5)
+                with c1:
+                    st.metric("👥 Total Estudiantes", tot_est)
+                with c2:
+                    st.metric("🏫 Cursos / Grados", tot_grados)
+                with c3:
+                    st.metric("✅ Asistencias Totales", tot_asistencias)
+                with c4:
+                    st.metric("⚖️ Convivencia / Excusas", f"{tot_observaciones} / {tot_excusas}")
+                with c5:
+                    st.metric("⭐ Promedio General", f"{promedio_general_notas:.2f}" if promedio_general_notas > 0 else "S/N")
+
+                st.markdown("---")
+
+                val_pen_g, val_nac_g = obtener_valoracion_cualitativa(promedio_general_notas)
+                
+                st.markdown("#### 📝 Diagnóstico General del Desempeño Educativo")
+                st.info(f"""
+                **Informe Consolidado para el Docente {prof['nombre']}:**
+                * **Población Académica:** La institución cuenta con **{tot_est} estudiantes** distribuidos en **{tot_grados} grupos/grados**.
+                * **Rendimiento Académico Global:** El promedio general de calificaciones se ubica en **{promedio_general_notas:.2f} puntos**, correspondiente al nivel de **{val_pen_g} ({val_nac_g})**.
+                * **Asistencia y Permanencia:** Se han registrado **{tot_asistencias} asistencias en aula** y se han radicado **{tot_excusas} excusas o justificaciones de inasistencia**.
+                * **Convivencia Escolar:** Se registran **{tot_observaciones} anotaciones** en el Observador del Estudiante (reconocimientos, llamados de atención y faltas).
+                * **Documentación Pedagógica:** Hay **{len(res_docs_all)} archivos/planes de área** alojados en el repositorio de la nube.
+                """)
+
+                st.markdown("---")
+
+                # RECOPILACIÓN PARA TABLA POR GRADOS
+                dict_grados = {g["id"]: g["nombre"] for g in res_grados_all}
+                list_grados_data = []
+
+                st.markdown("### 🏫 2. Desglose Detallado por Grupo / Grado")
+                
+                for g_id, g_nombre in dict_grados.items():
+                    est_grupo = [e for e in res_est_all if e.get("grado_id") == g_id]
+                    reg_grupo = [r for r in res_reg_all if r.get("grado_id") == g_id]
+                    ids_est_grupo = [e["id"] for e in est_grupo]
+                    conv_grupo = [c for c in res_conv_all if c.get("estudiante_id") in ids_est_grupo]
+                    calif_grupo = [c for c in res_calif_all if c.get("estudiante_id") in ids_est_grupo]
+                    
+                    prom_grupo = round(pd.DataFrame(calif_grupo)["nota"].mean(), 2) if calif_grupo else 0.0
+                    val_pen_gr, _ = obtener_valoracion_cualitativa(prom_grupo)
+
+                    list_grados_data.append({
+                        "nombre": g_nombre,
+                        "alumnos": len(est_grupo),
+                        "asistencias": len(reg_grupo),
+                        "observaciones": len(conv_grupo),
+                        "promedio": prom_grupo
+                    })
+
+                    with st.expander(f"📌 **{g_nombre}** — ({len(est_grupo)} Estudiantes | Promedio: {prom_grupo:.2f} - {val_pen_gr})", expanded=False):
+                        col_g1, col_g2, col_g3 = st.columns(3)
+                        with col_g1:
+                            st.write(f"**👥 Alumnos:** {len(est_grupo)}")
+                            st.write(f"**✅ Asistencias Totales:** {len(reg_grupo)}")
+                        with col_g2:
+                            st.write(f"**📝 Anotaciones Convivencia:** {len(conv_grupo)}")
+                            puntos_totales_grupo = sum(e.get("puntos", 0) for e in est_grupo)
+                            st.write(f"**🏆 Puntos Acumulados:** {puntos_totales_grupo}")
+                        with col_g3:
+                            st.write(f"**📊 Promedio Académico:** {prom_grupo:.2f}")
+                            st.write(f"**🏅 Valoración Institucional:** {val_pen_gr}")
+
+                        if est_grupo:
+                            st.write("**Nómina de Estudiantes y Rendimiento:**")
+                            df_est_g = pd.DataFrame([
+                                {
+                                    "Estudiante": e["nombre"],
+                                    "Teléfono Acudiente": e.get("telefono_acudiente") or "Sin teléfono",
+                                    "Puntos": e.get("puntos", 0),
+                                    "Asistencias": e.get("total_asistencias", 0)
+                                }
+                                for e in est_grupo
+                            ])
+                            st.dataframe(df_est_g, use_container_width=True)
+
+                st.markdown("---")
+
+                # RECOPILACIÓN PARA TABLA POR MATERIAS
+                st.markdown("### 📚 3. Desglose Detallado por Materia / Asignatura")
+                
+                df_calif = pd.DataFrame(res_calif_all) if res_calif_all else pd.DataFrame()
+                df_diarias = pd.DataFrame(res_notas_diarias_all) if res_notas_diarias_all else pd.DataFrame()
+
+                mats_resumen = []
+                for mat in MATERIAS_LISTA:
+                    key_n = normalizar_texto(mat)
+                    
+                    notas_mat = df_calif[df_calif["materia"].apply(normalizar_texto) == key_n]["nota"].tolist() if not df_calif.empty else []
+                    prom_m = round(sum(notas_mat) / len(notas_mat), 2) if notas_mat else 0.0
+                    v_pen, v_nac = obtener_valoracion_cualitativa(prom_m)
+
+                    actividades_mat = df_diarias[df_diarias["materia"].apply(normalizar_texto) == key_n] if not df_diarias.empty else pd.DataFrame()
+                    cant_actividades = len(actividades_mat[actividades_mat["nota"] > 0]) if not actividades_mat.empty else 0
+
+                    docs_mat = [d for d in res_docs_all if normalizar_texto(d.get("materia")) == key_n]
+
+                    mats_resumen.append({
+                        "Asignatura / Área": mat,
+                        "Promedio General": f"{prom_m:.2f}" if prom_m > 0 else "Sin Notas",
+                        "Valoración Escuela Nueva": v_pen,
+                        "Escala Nacional": v_nac,
+                        "Actividades Calificadas (C1-C10)": cant_actividades,
+                        "Documentos en Nube": len(docs_mat)
+                    })
+
+                df_mats = pd.DataFrame(mats_resumen)
+                st.dataframe(df_mats, use_container_width=True)
+
+                st.markdown("---")
+
+                # BOTONES DE EXPORTACIÓN OFICIAL
+                st.markdown("### 📥 4. Exportar Informe Directivo Consolidado")
+                c_exp1, c_exp2 = st.columns(2)
+
+                with c_exp1:
+                    pdf_c_bytes = generar_pdf_consolidado_general(
+                        profesor_nombre=prof["nombre"],
+                        tot_est=tot_est,
+                        tot_grados=tot_grados,
+                        tot_asist=tot_asistencias,
+                        tot_excusas=tot_excusas,
+                        tot_obs=tot_observaciones,
+                        prom_gen=promedio_general_notas,
+                        list_grados=list_grados_data,
+                        df_mats=df_mats
+                    )
+                    st.download_button(
+                        label="📄 Descargar Informe Consolidado en PDF",
+                        data=pdf_c_bytes,
+                        file_name=f"Informe_Consolidado_General_{prof['nombre'].replace(' ', '_')}_2026.pdf",
+                        mime="application/pdf",
+                        use_container_width=True,
+                        type="primary"
+                    )
+
+                with c_exp2:
+                    excel_c_bytes = generar_excel_consolidado_general(
+                        profesor_nombre=prof["nombre"],
+                        tot_est=tot_est,
+                        tot_grados=tot_grados,
+                        tot_asist=tot_asistencias,
+                        tot_excusas=tot_excusas,
+                        tot_obs=tot_observaciones,
+                        prom_gen=promedio_general_notas,
+                        list_grados=list_grados_data,
+                        df_mats=df_mats
+                    )
+                    st.download_button(
+                        label="📊 Descargar Consolidado General en Excel (.xlsx)",
+                        data=excel_c_bytes,
+                        file_name=f"Consolidado_General_{prof['nombre'].replace(' ', '_')}_2026.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True
+                    )
 
         # 1. DOCUMENTOS INSTITUCIONALES
         with t_docs:
