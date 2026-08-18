@@ -2,12 +2,13 @@
 """
 SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA
 =======================================================================================
-- Carga Ultra Rápida Dinámica (Sin bloqueos de pantalla).
+- Observador de Convivencia posicionado antes de Boletines Académicos.
+- Carga Ultra Rápida Dinámica.
 - Evaluación Continua con Nombre y Fecha por Actividad (C1 - C10).
 - Generación de Boletines Oficiales en PDF (2 Páginas con Escudo y Bandera).
 - Adaptador Automático de Guías de Aprendizaje (PDF / Word / HTML a Escuela Nueva).
 - Control de Asistencia en PDF y Excel.
-- Dashboard Estadístico, Observador de Convivencia y Tabla de Líderes.
+- Dashboard Estadístico y Tabla de Líderes.
 """
 
 import os
@@ -1017,14 +1018,14 @@ else:
     st.title(f"📋 Asistente Educativo — {grado_sel_nombre if grado_sel_nombre else 'Crea un curso'}")
 
     if grado_sel_id:
-        t_docs, t_asistencia, t_estadisticas, t_notas, t_boletines, t_adaptador, t_convivencia, t_lideres = st.tabs([
+        t_docs, t_asistencia, t_estadisticas, t_notas, t_convivencia, t_boletines, t_adaptador, t_lideres = st.tabs([
             "📄 Documentos Institucionales",
             "📋 Registro de Asistencia", 
             "📊 Resumen Estadístico Mensual",
             "📝 Calificaciones Continuas",
+            "⚖️ Observador de Convivencia",
             "📄 Boletines Académicos",
             "🧩 Adaptador de Guías",
-            "⚖️ Observador de Convivencia",
             "🏆 Tabla de Líderes"
         ])
 
@@ -1465,7 +1466,65 @@ else:
                 st.markdown(f"### 🏁 Nota Definitiva Calculada ({mat_sel}): **`{definitiva_materia if definitiva_materia > 0 else 'Sin Notas'}`**")
                 st.caption("✨ *Sincronizado automáticamente con la pestaña de Boletines Académicos.*")
 
-        # 5. MÓDULO DE BOLETINES ACADÉMICOS
+        # 5. OBSERVADOR DE CONVIVENCIA
+        with t_convivencia:
+            st.subheader("⚖️ Observador del Estudiante / Convivencia")
+            estudiantes = obtener_estudiantes(grado_sel_id, prof["id"])
+            
+            if estudiantes:
+                dict_e = {e["nombre"]: e["id"] for e in estudiantes}
+                c_c1, c_c2 = st.columns(2)
+                with c_c1:
+                    est_conv_nom = st.selectbox("Estudiante a registrar:", list(dict_e.keys()))
+                with c_c2:
+                    tipo_conv = st.selectbox("Tipo de anotación:", ["Positivo / Reconocimiento", "Llamado de atención", "Falta grave", "Excusa / Justificación"])
+                
+                desc_conv = st.text_area("Descripción de la situación:")
+                if st.button("📝 Guardar Anotación", use_container_width=True):
+                    if desc_conv.strip():
+                        supabase.table("convivencia").insert({
+                            "estudiante_id": dict_e[est_conv_nom],
+                            "fecha": datetime.date.today().isoformat(),
+                            "tipo": tipo_conv,
+                            "descripcion": desc_conv.strip(),
+                            "profesor_id": prof["id"]
+                        }).execute()
+                        st.success("Anotación guardada en el observador.")
+                        st.rerun()
+
+                st.markdown("---")
+                st.write("### 🔍 Consulta de Observaciones y Excusas (Filtros Rápido)")
+                
+                res_conv = supabase.table("convivencia").select("*").eq("profesor_id", prof["id"]).execute()
+                if res_conv.data:
+                    id_to_name = {e["id"]: e["nombre"] for e in estudiantes}
+                    
+                    df_c = pd.DataFrame([
+                        {
+                            "Fecha": c["fecha"], 
+                            "Estudiante": id_to_name.get(c["estudiante_id"], "Otro Curso"), 
+                            "Tipo": c["tipo"], 
+                            "Anotación": c["descripcion"]
+                        }
+                        for c in res_conv.data if c["estudiante_id"] in id_to_name
+                    ])
+                    
+                    col_f1, col_f2 = st.columns(2)
+                    with col_f1:
+                        filtro_est = st.selectbox("Filtrar por Estudiante:", ["Todos los estudiantes"] + list(dict_e.keys()))
+                    with col_f2:
+                        filtro_tipo = st.selectbox("Filtrar por Tipo de Anotación:", ["Todos los tipos", "Positivo / Reconocimiento", "Llamado de atención", "Falta grave", "Excusa / Justificación"])
+
+                    if filtro_est != "Todos los estudiantes":
+                        df_c = df_c[df_c["Estudiante"] == filtro_est]
+                    if filtro_tipo != "Todos los tipos":
+                        df_c = df_c[df_c["Tipo"] == filtro_tipo]
+
+                    st.dataframe(df_c, use_container_width=True)
+                else:
+                    st.info("Aún no hay anotaciones en el observador.")
+
+        # 6. MÓDULO DE BOLETINES ACADÉMICOS
         with t_boletines:
             st.subheader("📄 Generación y Consulta de Boletines Académicos de Escuela Nueva")
             estudiantes = obtener_estudiantes(grado_sel_id, prof["id"])
@@ -1556,7 +1615,7 @@ else:
                     type="primary"
                 )
 
-        # 6. ADAPTADOR DE GUÍAS DE APRENDIZAJE
+        # 7. ADAPTADOR DE GUÍAS DE APRENDIZAJE
         with t_adaptador:
             st.subheader("🧩 Adaptador Automático de Guías a Escuela Nueva")
             st.caption("Carga tus guías tradicionales (PDF, Word o Texto/HTML) y transfórmalas a la secuencia didáctica de 4 Momentos.")
@@ -1656,64 +1715,6 @@ else:
                                 use_container_width=True
                             )
                             st.code(html_str, language="html")
-
-        # 7. OBSERVADOR DE CONVIVENCIA CON FILTROS AVANZADOS
-        with t_convivencia:
-            st.subheader("⚖️ Observador del Estudiante / Convivencia")
-            estudiantes = obtener_estudiantes(grado_sel_id, prof["id"])
-            
-            if estudiantes:
-                dict_e = {e["nombre"]: e["id"] for e in estudiantes}
-                c_c1, c_c2 = st.columns(2)
-                with c_c1:
-                    est_conv_nom = st.selectbox("Estudiante a registrar:", list(dict_e.keys()))
-                with c_c2:
-                    tipo_conv = st.selectbox("Tipo de anotación:", ["Positivo / Reconocimiento", "Llamado de atención", "Falta grave", "Excusa / Justificación"])
-                
-                desc_conv = st.text_area("Descripción de la situación:")
-                if st.button("📝 Guardar Anotación", use_container_width=True):
-                    if desc_conv.strip():
-                        supabase.table("convivencia").insert({
-                            "estudiante_id": dict_e[est_conv_nom],
-                            "fecha": datetime.date.today().isoformat(),
-                            "tipo": tipo_conv,
-                            "descripcion": desc_conv.strip(),
-                            "profesor_id": prof["id"]
-                        }).execute()
-                        st.success("Anotación guardada en el observador.")
-                        st.rerun()
-
-                st.markdown("---")
-                st.write("### 🔍 Consulta de Observaciones y Excusas (Filtros Rápido)")
-                
-                res_conv = supabase.table("convivencia").select("*").eq("profesor_id", prof["id"]).execute()
-                if res_conv.data:
-                    id_to_name = {e["id"]: e["nombre"] for e in estudiantes}
-                    
-                    df_c = pd.DataFrame([
-                        {
-                            "Fecha": c["fecha"], 
-                            "Estudiante": id_to_name.get(c["estudiante_id"], "Otro Curso"), 
-                            "Tipo": c["tipo"], 
-                            "Anotación": c["descripcion"]
-                        }
-                        for c in res_conv.data if c["estudiante_id"] in id_to_name
-                    ])
-                    
-                    col_f1, col_f2 = st.columns(2)
-                    with col_f1:
-                        filtro_est = st.selectbox("Filtrar por Estudiante:", ["Todos los estudiantes"] + list(dict_e.keys()))
-                    with col_f2:
-                        filtro_tipo = st.selectbox("Filtrar por Tipo de Anotación:", ["Todos los tipos", "Positivo / Reconocimiento", "Llamado de atención", "Falta grave", "Excusa / Justificación"])
-
-                    if filtro_est != "Todos los estudiantes":
-                        df_c = df_c[df_c["Estudiante"] == filtro_est]
-                    if filtro_tipo != "Todos los tipos":
-                        df_c = df_c[df_c["Tipo"] == filtro_tipo]
-
-                    st.dataframe(df_c, use_container_width=True)
-                else:
-                    st.info("Aún no hay anotaciones en el observador.")
 
         # 8. TABLA DE LÍDERES
         with t_lideres:
