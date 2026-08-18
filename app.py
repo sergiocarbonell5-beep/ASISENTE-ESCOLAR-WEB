@@ -2,10 +2,10 @@
 """
 SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA
 =======================================================================================
+- Evaluación Continua con Nombre y Fecha por Actividad (C1 - C10).
 - Generación de Boletines Oficiales en PDF (2 Páginas con Escudo y Bandera).
 - Adaptador Automático de Guías de Aprendizaje (PDF / Word / HTML a Escuela Nueva).
-- Autoguardado e integración continua con Supabase.
-- PDF y Excel de Control de Asistencia.
+- Control de Asistencia en PDF y Excel.
 - Dashboard Estadístico, Observador de Convivencia y Tabla de Líderes.
 """
 
@@ -30,7 +30,6 @@ from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from reportlab.lib import colors
 import docx
-from docx.shared import Pt, Inches
 from pypdf import PdfReader
 
 from supabase import create_client, Client
@@ -276,9 +275,9 @@ def crear_link_whatsapp(telefono, nombre_estudiante, nombre_profesor):
 def generar_pdf_boletin_oficial(estudiante_nombre, grado_nombre, periodo, sede_nombre, profesor_nombre, dict_notas, observaciones_txt):
     buffer = io.BytesIO()
     p = canvas.Canvas(buffer, pagesize=letter)
-    width, height = letter # 612 x 792 pt
+    width, height = letter
 
-    # 1. ESCUDO C.E.R. SIRAVITA (SUPERIOR CENTRO)
+    # 1. ESCUDO C.E.R. SIRAVITA
     ruta_escudo = "escudo_siravita.png"
     if os.path.exists(ruta_escudo):
         p.drawImage(ruta_escudo, (width / 2.0) - 25, height - 62, width=50, height=50, mask='auto')
@@ -308,7 +307,7 @@ def generar_pdf_boletin_oficial(estudiante_nombre, grado_nombre, periodo, sede_n
     p.setFont("Helvetica-Bold", 6)
     p.drawCentredString(width / 2.0, y_verde + 3, "RESOLUCION DE APROBACION DE ESTUDIO 8: 008708-24-10-2024")
 
-    # 4. BANDERA DE COLOMBIA (ILUSTRACIÓN INTERMEDIA)
+    # 4. BANDERA DE COLOMBIA
     y_bandera = y_verde - 42
     ruta_bandera = "bandera_colombia.png"
     if os.path.exists(ruta_bandera):
@@ -320,7 +319,7 @@ def generar_pdf_boletin_oficial(estudiante_nombre, grado_nombre, periodo, sede_n
     p.setFont("Helvetica", 8.5)
     p.drawCentredString(width / 2.0, y_titulo, "Boletín Académico Escuela Nueva de Básica Primaria")
 
-    # 6. DATOS ENCABEZADO CON LÍNEAS PUNTEADAS
+    # 6. DATOS ENCABEZADO
     p.setFont("Helvetica", 8)
     y_d1 = y_titulo - 20
     p.drawString(40, y_d1, f"Sede: {sede_nombre.capitalize()}.........................................................")
@@ -334,12 +333,11 @@ def generar_pdf_boletin_oficial(estudiante_nombre, grado_nombre, periodo, sede_n
     y_d3 = y_d2 - 16
     p.drawString(40, y_d3, f"Docente: {profesor_nombre.title()}............................................................")
 
-    # 7. TABLA DE CALIFICACIONES FORMATO EXACTO
+    # 7. TABLA DE CALIFICACIONES
     y_tb_top = y_d3 - 18
     h_th = 28
     h_tr = 16.5
 
-    # Fondos Cabecera
     p.setFillColor(colors.HexColor("#F9EBEA"))
     p.rect(30, y_tb_top - h_th, 155, h_th, fill=True, stroke=True)
     
@@ -350,7 +348,6 @@ def generar_pdf_boletin_oficial(estudiante_nombre, grado_nombre, periodo, sede_n
     p.setFillColor(colors.HexColor("#FFC90E"))
     p.rect(395, y_tb_top - h_th, 187, h_th, fill=True, stroke=True)
 
-    # Texto Cabecera
     p.setFillColor(colors.black)
     p.setFont("Helvetica-BoldOblique", 7)
     p.drawString(34, y_tb_top - 16, "AREAS/ ASIGNATURAS")
@@ -361,7 +358,6 @@ def generar_pdf_boletin_oficial(estudiante_nombre, grado_nombre, periodo, sede_n
     p.drawString(294, y_tb_top - 16, "Valoración Cuantitativa")
     p.drawString(399, y_tb_top - 16, "Escala Nacional")
 
-    # Filas de Materias
     p.setFillColor(colors.black)
     y_row = y_tb_top - h_th
 
@@ -393,7 +389,7 @@ def generar_pdf_boletin_oficial(estudiante_nombre, grado_nombre, periodo, sede_n
         p.setFont("Helvetica-Oblique", 6.8)
         p.drawString(399, y_row + 4, val_nac)
 
-    # 8. OBSERVACIONES Y LÍNEAS PUNTEADAS
+    # 8. OBSERVACIONES
     y_obs_sec = y_row - 22
     p.setFont("Helvetica-Bold", 8)
     p.drawString(60, y_obs_sec, "OBSERVACIONES:")
@@ -463,7 +459,7 @@ def generar_pdf_boletin_oficial(estudiante_nombre, grado_nombre, periodo, sede_n
     buffer.seek(0)
     return buffer
 
-# GENERACIÓN DE PDF EXACTO SOBRE PLANTILLA ASISTENCIA
+# GENERACIÓN DE PDF ASISTENCIA
 def generar_pdf_asistencia_oficial(grado_nombre, profesor_nombre, registros_mes, excusas_mes, estudiantes_lista, mes_nombre, sede_nombre=SEDE_DEFECTO):
     buffer = io.BytesIO()
     p = canvas.Canvas(buffer, pagesize=letter)
@@ -695,9 +691,7 @@ def generar_excel_asistencia_oficial(grado_nombre, profesor_nombre, registros_me
     output.seek(0)
     return output
 
-# ================================================================
-# LÓGICA DEL ADAPTADOR DE GUÍAS DE APRENDIZAJE
-# ================================================================
+# LÓGICA ADAPTADOR DE GUÍAS
 def extraer_texto_archivo(archivo_subido, tipo_archivo):
     texto = ""
     try:
@@ -717,7 +711,6 @@ def extraer_texto_archivo(archivo_subido, tipo_archivo):
     return texto.strip()
 
 def adaptar_contenido_escuela_nueva(texto_original, eje_tematico):
-    # Algoritmo de estructuración pedagógica en los 4 Momentos de Escuela Nueva
     lineas = [l.strip() for l in texto_original.split("\n") if l.strip()]
     total = len(lineas)
     
@@ -742,9 +735,8 @@ def adaptar_contenido_escuela_nueva(texto_original, eje_tematico):
 def generar_pdf_guia_adaptada(materia, eje_tematico, momentos, profesor_nombre, grado_nombre):
     buffer = io.BytesIO()
     p = canvas.Canvas(buffer, pagesize=letter)
-    width, height = letter # 612 x 792 pt
+    width, height = letter
 
-    # Encabezado Oficial
     p.setFont("Helvetica-Bold", 9)
     p.drawCentredString(width / 2.0, height - 35, "CENTRO EDUCATIVO RURAL SIRAVITA - ARBOLEDAS")
     p.setFont("Helvetica-Bold", 11)
@@ -817,7 +809,7 @@ def generar_docx_guia_adaptada(materia, eje_tematico, momentos, profesor_nombre,
     return buffer
 
 def generar_html_guia_adaptada(materia, eje_tematico, momentos, profesor_nombre, grado_nombre):
-    html = f"""
+    return f"""
     <!DOCTYPE html>
     <html>
     <head>
@@ -847,10 +839,9 @@ def generar_html_guia_adaptada(materia, eje_tematico, momentos, profesor_nombre,
     </body>
     </html>
     """
-    return html
 
 # ================================================================
-# VENTANA CELEBRACIÓN CON AUDIO
+# VENTANA CELEBRACIÓN
 # ================================================================
 @st.dialog("🎉 ¡Asistencia Registrada!", width="large")
 def ventana_celebracion(res):
@@ -1298,19 +1289,21 @@ else:
                 else:
                     st.caption("Ingresa calificaciones en la pestaña 'Calificaciones' para visualizar los promedios por materia.")
 
-        # 4. CALIFICACIONES CONTINUAS
+        # 4. CALIFICACIONES CONTINUAS (CON NOMBRE Y FECHA DE ACTIVIDAD)
         with t_notas:
-            st.subheader("📝 Evaluación Continua Diaria (Autoguardado y Sincronización Directa)")
+            st.subheader(f"📝 Evaluación Continua — {grado_sel_nombre}")
+            
+            # FILTRO EXCLUSIVO POR ESTUDIANTES DEL GRADO SELECCIONADO
             estudiantes = obtener_estudiantes(grado_sel_id, prof["id"])
             
             if not estudiantes:
-                st.info("Agrega estudiantes para gestionar sus calificaciones.")
+                st.info(f"No hay alumnos registrados en **{grado_sel_nombre}**. Agrega estudiantes desde el menú lateral.")
             else:
                 dict_e = {e["nombre"]: e for e in estudiantes}
                 
                 col_e1, col_e2, col_e3 = st.columns(3)
                 with col_e1:
-                    est_sel_nombre = st.selectbox("Estudiante:", list(dict_e.keys()))
+                    est_sel_nombre = st.selectbox(f"Estudiante ({grado_sel_nombre}):", list(dict_e.keys()))
                     est_sel_obj = dict_e[est_sel_nombre]
                 with col_e2:
                     mat_sel = st.selectbox("Materia / Asignatura:", MATERIAS_LISTA)
@@ -1322,11 +1315,11 @@ else:
                 c_head_izq, c_head_der = st.columns([1.6, 1.4])
                 
                 with c_head_izq:
-                    st.write(f"### ✏️ Planilla para: **{est_sel_nombre}**\n*{mat_sel} — Periodo {per_sel}*")
+                    st.write(f"### ✏️ Planilla de **{est_sel_nombre}**\n*{grado_sel_nombre} | {mat_sel} — Periodo {per_sel}*")
                 
                 with c_head_der:
                     with st.expander("⚙️ Configurar % de Ponderación para esta Materia", expanded=False):
-                        st.caption("Ajusta el peso relativo de cada dimensión. La suma debe dar exactamente 100%:")
+                        st.caption("Ajusta el peso relativo de cada dimensión. La suma debe dar 100%:")
                         
                         key_p0 = f"peso_0_{mat_sel}_{per_sel}"
                         key_p1 = f"peso_1_{mat_sel}_{per_sel}"
@@ -1370,50 +1363,78 @@ else:
                     peso_dim = pesos_dimensiones[dim_idx]
                     
                     with st.expander(f"{dimension}  —  [ Peso: {peso_dim}% ]", expanded=True):
-                        st.caption("Los valores se guardan de forma **automática** al modificarlos:")
+                        st.caption("Ingresa la **Nota**, el **Nombre de la Actividad** y la **Fecha** para cada casilla (C1 - C10):")
                         
                         notas_dim = [n for n in notas_guardadas if n.get("dimension") == dimension]
-                        dict_casillas = {n.get("casilla_num"): float(n.get("nota", 0.0)) for n in notas_dim}
+                        dict_casillas = {n.get("casilla_num"): n for n in notas_dim}
                         
-                        cols_cas = st.columns(10)
                         val_validos = []
 
+                        # Mostrar casillas de evaluación con campos detallados
                         for c_num in range(1, 11):
-                            val_actual = float(dict_casillas.get(c_num, 0.0))
-                            with cols_cas[c_num - 1]:
+                            n_obj = dict_casillas.get(c_num, {})
+                            val_actual = float(n_obj.get("nota", 0.0))
+                            act_actual = str(n_obj.get("nombre_actividad", ""))
+                            fecha_actual_str = n_obj.get("fecha_actividad")
+                            
+                            try:
+                                f_val = datetime.date.fromisoformat(fecha_actual_str) if fecha_actual_str else datetime.date.today()
+                            except Exception:
+                                f_val = datetime.date.today()
+
+                            c_n1, c_n2, c_n3 = st.columns([1.2, 2.5, 1.5])
+                            
+                            with c_n1:
                                 val_input = st.number_input(
-                                    f"C{c_num}",
+                                    f"C{c_num} Nota:",
                                     min_value=0.0,
                                     max_value=5.0,
                                     value=val_actual,
                                     step=0.1,
-                                    key=f"auto_{est_sel_obj['id']}_{mat_sel}_{per_sel}_{dim_idx}_{c_num}"
+                                    key=f"nota_{est_sel_obj['id']}_{mat_sel}_{per_sel}_{dim_idx}_{c_num}"
                                 )
-                                
-                                if abs(val_input - val_actual) > 0.01:
-                                    try:
-                                        supabase.table("notas_diarias").upsert({
-                                            "estudiante_id": est_sel_obj["id"],
-                                            "materia": mat_sel,
-                                            "periodo": per_sel,
-                                            "dimension": dimension,
-                                            "casilla_num": c_num,
-                                            "nota": val_input,
-                                            "profesor_id": prof["id"]
-                                        }, on_conflict="estudiante_id,materia,periodo,dimension,casilla_num").execute()
-                                        st.toast(f"✅ Casilla C{c_num} actualizada")
-                                    except Exception as err:
-                                        st.error(f"Error al autoguardar: {err}")
+                            with c_n2:
+                                act_input = st.text_input(
+                                    f"Actividad C{c_num}:",
+                                    value=act_actual,
+                                    placeholder="Ej. Taller en clase",
+                                    key=f"act_{est_sel_obj['id']}_{mat_sel}_{per_sel}_{dim_idx}_{c_num}"
+                                )
+                            with c_n3:
+                                f_input = st.date_input(
+                                    f"Fecha C{c_num}:",
+                                    value=f_val,
+                                    key=f"fec_{est_sel_obj['id']}_{mat_sel}_{per_sel}_{dim_idx}_{c_num}"
+                                )
 
-                                if val_input > 0.0:
-                                    val_validos.append(val_input)
+                            # Autoguardado al detectar cambios
+                            f_str_input = f_input.isoformat()
+                            if abs(val_input - val_actual) > 0.01 or act_input != act_actual or f_str_input != fecha_actual_str:
+                                try:
+                                    supabase.table("notas_diarias").upsert({
+                                        "estudiante_id": est_sel_obj["id"],
+                                        "materia": mat_sel,
+                                        "periodo": per_sel,
+                                        "dimension": dimension,
+                                        "casilla_num": c_num,
+                                        "nota": val_input,
+                                        "nombre_actividad": act_input.strip(),
+                                        "fecha_actividad": f_str_input,
+                                        "profesor_id": prof["id"]
+                                    }, on_conflict="estudiante_id,materia,periodo,dimension,casilla_num").execute()
+                                    st.toast(f"✅ C{c_num} actualizada para {est_sel_nombre}")
+                                except Exception as err:
+                                    st.error(f"Error al autoguardar C{c_num}: {err}")
+
+                            if val_input > 0.0:
+                                val_validos.append(val_input)
 
                         prom_dim = round(sum(val_validos) / len(val_validos), 2) if val_validos else 0.0
                         promedios_dimensiones.append((prom_dim, peso_dim))
                         
                         col_p1, col_p2 = st.columns([3, 1])
                         with col_p1:
-                            st.write(f"**Notas tomadas:** {len(val_validos)}/10")
+                            st.write(f"**Actividades Calificadas:** {len(val_validos)}/10")
                         with col_p2:
                             st.markdown(f"**Promedio Parcial:** `{prom_dim if prom_dim > 0 else 'S/N'}` *(Aporta {round(prom_dim * (peso_dim / 100), 2)} a la nota final)*")
 
@@ -1449,7 +1470,7 @@ else:
                 col_b1, col_b2, col_b3 = st.columns([1.5, 1, 1])
                 
                 with col_b1:
-                    est_bol_nombre = st.selectbox("Selecciona Estudiante para Boletín:", list(dict_e_bol.keys()))
+                    est_bol_nombre = st.selectbox(f"Selecciona Estudiante ({grado_sel_nombre}):", list(dict_e_bol.keys()))
                     est_bol_obj = dict_e_bol[est_bol_nombre]
                 with col_b2:
                     per_bol_sel = st.selectbox("Selecciona Periodo:", ["Primero", "Segundo", "Tercero", "Cuarto"])
@@ -1600,7 +1621,6 @@ else:
 
                         st.markdown("---")
 
-                        # Opciones de Descarga
                         if formato_salida == "Documento PDF (.pdf)":
                             pdf_g_bytes = generar_pdf_guia_adaptada(mat_guia, eje_tematico_final, momentos_res, prof["nombre"], grado_sel_nombre)
                             st.download_button(
