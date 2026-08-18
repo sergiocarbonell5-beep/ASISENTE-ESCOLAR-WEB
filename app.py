@@ -2,7 +2,7 @@
 """
 SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA
 =======================================================================================
-- Módulo 0: Consolidado General e Informes Directivos con Exportación PDF y Excel.
+- Módulo 0: Consolidado General e Informes Directivos (PDF Multi-página y Excel).
 - Módulo 1: Documentos Institucionales en Nube.
 - Módulo 2: Registro de Asistencia Oficial (PDF/Excel).
 - Módulo 3: Resumen Estadístico Mensual.
@@ -283,123 +283,180 @@ def crear_link_whatsapp(telefono, nombre_estudiante, nombre_profesor):
     return f"https://wa.me/{num_limpio}?text={msg_encoded}"
 
 # ================================================================
-# GENERACIÓN DE PDF INFORME CONSOLIDADO GENERAL
+# GENERACIÓN DE PDF INFORME CONSOLIDADO GENERAL (COMPLETO MULTI-PÁGINA)
 # ================================================================
-def generar_pdf_consolidado_general(profesor_nombre, tot_est, tot_grados, tot_asist, tot_excusas, tot_obs, prom_gen, list_grados, df_mats):
+def generar_pdf_consolidado_general(profesor_nombre, tot_est, tot_grados, tot_asist, tot_excusas, tot_obs, prom_gen, list_grados, df_mats, res_est_all):
     buffer = io.BytesIO()
     p = canvas.Canvas(buffer, pagesize=letter)
     width, height = letter
 
-    # ESCUDO
-    ruta_escudo = "escudo_siravita.png"
-    if os.path.exists(ruta_escudo):
-        p.drawImage(ruta_escudo, (width / 2.0) - 25, height - 60, width=50, height=50, mask='auto')
+    def dibujar_encabezado(p_canvas, titulo_secundario="INFORME DIRECTIVO - CONSOLIDADO GENERAL"):
+        ruta_escudo = "escudo_siravita.png"
+        if os.path.exists(ruta_escudo):
+            p_canvas.drawImage(ruta_escudo, (width / 2.0) - 22, height - 55, width=44, height=44, mask='auto')
 
-    p.setFillColor(colors.black)
-    p.setFont("Helvetica-Bold", 8.5)
-    y_hdr = height - 68
-    p.drawCentredString(width / 2.0, y_hdr, "REPUBLICA DE COLOMBIA")
-    p.drawCentredString(width / 2.0, y_hdr - 10, "CENTRO EDUCATIVO RURAL SIRAVITA - ARBOLEDAS")
-    p.drawCentredString(width / 2.0, y_hdr - 20, "INFORME DIRECTIVO - CONSOLIDADO GENERAL ACADÉMICO Y DE ASISTENCIA")
+        p_canvas.setFillColor(colors.black)
+        p_canvas.setFont("Helvetica-Bold", 8.5)
+        y_hdr = height - 62
+        p_canvas.drawCentredString(width / 2.0, y_hdr, "REPUBLICA DE COLOMBIA")
+        p_canvas.drawCentredString(width / 2.0, y_hdr - 10, "CENTRO EDUCATIVO RURAL SIRAVITA - ARBOLEDAS")
+        p_canvas.setFont("Helvetica-Bold", 8)
+        p_canvas.drawCentredString(width / 2.0, y_hdr - 20, titulo_secundario)
 
-    p.setStrokeColor(colors.HexColor("#008037"))
-    p.setLineWidth(1.5)
-    p.line(40, y_hdr - 28, width - 40, y_hdr - 28)
+        p_canvas.setStrokeColor(colors.HexColor("#008037"))
+        p_canvas.setLineWidth(1.5)
+        p_canvas.line(30, y_hdr - 25, width - 30, y_hdr - 25)
+
+    # ---------------------------------------------------------
+    # HOJA 1: RESUMEN EJECUTIVO Y DIAGNÓSTICO GENERAL
+    # ---------------------------------------------------------
+    dibujar_encabezado(p)
 
     p.setFont("Helvetica", 8)
-    p.drawString(40, y_hdr - 42, f"Docente Encargado: {profesor_nombre}   |   Fecha de Reporte: {datetime.date.today().strftime('%d/%m/%Y')}   |   Año Lectivo: 2026")
+    y_pos = height - 95
+    p.drawString(30, y_pos, f"Docente Encargado: {profesor_nombre}   |   Fecha: {datetime.date.today().strftime('%d/%m/%Y')}   |   Año Lectivo: 2026")
 
-    # CUADRO MÉTRICAS GLOBALES
-    y_m = y_hdr - 95
+    # CUADRO DE MÉTRICAS GLOBALES
+    y_m = y_pos - 50
     p.setFillColor(colors.HexColor("#F4F6F7"))
-    p.rect(40, y_m, width - 80, 45, fill=True, stroke=True)
+    p.rect(30, y_m, width - 60, 42, fill=True, stroke=True)
 
     p.setFillColor(colors.HexColor("#008037"))
-    p.setFont("Helvetica-Bold", 8.5)
-    p.drawString(50, y_m + 30, f"ESTUDIANTES: {tot_est}")
-    p.drawString(160, y_m + 30, f"GRADOS: {tot_grados}")
-    p.drawString(250, y_m + 30, f"ASISTENCIAS: {tot_asist}")
-    p.drawString(360, y_m + 30, f"EXCUSAS/OBS: {tot_excusas}/{tot_obs}")
+    p.setFont("Helvetica-Bold", 8)
+    p.drawString(40, y_m + 28, f"ESTUDIANTES: {tot_est}")
+    p.drawString(150, y_m + 28, f"GRADOS: {tot_grados}")
+    p.drawString(240, y_m + 28, f"ASISTENCIAS: {tot_asist}")
+    p.drawString(350, y_m + 28, f"EXCUSAS/OBS: {tot_excusas}/{tot_obs}")
     
     val_p_g, val_n_g = obtener_valoracion_cualitativa(prom_gen)
-    p.drawString(480, y_m + 30, f"PROMEDIO: {prom_gen:.2f}")
+    p.drawString(470, y_m + 28, f"PROMEDIO: {prom_gen:.2f}")
 
     p.setFillColor(colors.black)
     p.setFont("Helvetica-Oblique", 7.5)
-    p.drawString(50, y_m + 12, f"Estado Institucional Global: {val_p_g} ({val_n_g})")
+    p.drawString(40, y_m + 10, f"Estado Institucional Global: {val_p_g} ({val_n_g})")
 
-    # DESGLOSE POR GRADOS
-    y_g = y_m - 25
+    # SECCIÓN 1: DIAGNÓSTICO GENERAL DEL DESEMPEÑO EDUCATIVO
+    y_diag = y_m - 25
     p.setFont("Helvetica-Bold", 9)
     p.setFillColor(colors.HexColor("#1B432C"))
-    p.drawString(40, y_g, "1. RESUMEN Y CONSOLIDADO POR CURSOS / GRADOS")
+    p.drawString(30, y_diag, "1. DIAGNÓSTICO GENERAL DEL DESEMPEÑO EDUCATIVO")
 
-    y_g -= 15
-    h_th = 16
-    p.setFillColor(colors.HexColor("#008037"))
-    p.rect(40, y_g - h_th, width - 80, h_th, fill=True, stroke=True)
-    
-    p.setFillColor(colors.white)
-    p.setFont("Helvetica-Bold", 7.5)
-    p.drawString(45, y_g - 11, "Grado / Curso")
-    p.drawString(180, y_g - 11, "N° Alumnos")
-    p.drawString(260, y_g - 11, "Asistencias")
-    p.drawString(340, y_g - 11, "Anotaciones Convivencia")
-    p.drawString(480, y_g - 11, "Promedio")
+    p.setFillColor(colors.HexColor("#FCF8E3"))
+    p.rect(30, y_diag - 85, width - 60, 78, fill=True, stroke=True)
 
-    y_row = y_g - h_th
     p.setFillColor(colors.black)
-    p.setFont("Helvetica", 7.5)
+    p.setFont("Helvetica-Bold", 7.5)
+    p.drawString(40, y_diag - 15, f"Análisis Institucional Consolidado — Docente {profesor_nombre}:")
 
-    for g_info in list_grados:
-        y_row -= 15
-        if y_row < 60:
-            p.showPage()
-            y_row = height - 50
+    p.setFont("Helvetica", 7.2)
+    lineas_diag = [
+        f"• Población Académica: La institución cuenta con {tot_est} estudiantes activos en {tot_grados} grupos escolares.",
+        f"• Rendimiento Académico Global: El promedio de notas se ubica en {prom_gen:.2f} puntos ({val_p_g} - {val_n_g}).",
+        f"• Asistencia y Permanencia: Se registran {tot_asist} asistencias efectivas en aula y {tot_excusas} excusas o justificaciones.",
+        f"• Convivencia Escolar: Se registran {tot_obs} anotaciones en el Observador (reconocimientos, llamados y faltas).",
+        "• Recomendación Pedagógica: Fortalecer el acompañamiento en las asignaturas con estado 'Pendiente' o 'Básico'."
+    ]
 
-        p.rect(40, y_row, width - 80, 15, fill=False, stroke=True)
-        p.drawString(45, y_row + 4, str(g_info['nombre'])[:25])
-        p.drawString(180, y_row + 4, str(g_info['alumnos']))
-        p.drawString(260, y_row + 4, str(g_info['asistencias']))
-        p.drawString(340, y_row + 4, str(g_info['observaciones']))
-        p.drawString(480, y_row + 4, f"{g_info['promedio']:.2f}")
+    y_l = y_diag - 28
+    for lin in lineas_diag:
+        p.drawString(40, y_l, lin)
+        y_l -= 11
 
-    # RENDIMIENTO POR MATERIAS
-    y_mats = y_row - 30
-    if y_mats < 150:
-        p.showPage()
-        y_mats = height - 60
-
+    # SECCIÓN 2: RENDIMIENTO ACADÉMICO GLOBAL POR MATERIA
+    y_mats = y_diag - 105
     p.setFont("Helvetica-Bold", 9)
     p.setFillColor(colors.HexColor("#1B432C"))
-    p.drawString(40, y_mats, "2. RENDIMIENTO ACADÉMICO GLOBAL POR MATERIA")
+    p.drawString(30, y_mats, "2. RENDIMIENTO ACADÉMICO GLOBAL POR MATERIA")
 
     y_mats -= 15
+    h_th = 15
     p.setFillColor(colors.HexColor("#008037"))
-    p.rect(40, y_mats - h_th, width - 80, h_th, fill=True, stroke=True)
+    p.rect(30, y_mats - h_th, width - 60, h_th, fill=True, stroke=True)
 
     p.setFillColor(colors.white)
-    p.setFont("Helvetica-Bold", 7.5)
-    p.drawString(45, y_mats - 11, "Asignatura / Área")
-    p.drawString(250, y_mats - 11, "Promedio")
-    p.drawString(330, y_mats - 11, "Valoración Escuela Nueva")
-    p.drawString(480, y_mats - 11, "Actividades (C1-C10)")
+    p.setFont("Helvetica-Bold", 7)
+    p.drawString(35, y_mats - 11, "Asignatura / Área")
+    p.drawString(240, y_mats - 11, "Promedio")
+    p.drawString(320, y_mats - 11, "Valoración Escuela Nueva")
+    p.drawString(470, y_mats - 11, "Actividades (C1-C10)")
 
     y_r_m = y_mats - h_th
     p.setFillColor(colors.black)
 
     for _, row in df_mats.iterrows():
-        y_r_m -= 14
-        if y_r_m < 50:
-            p.showPage()
-            y_r_m = height - 50
+        y_r_m -= 13.5
+        p.rect(30, y_r_m, width - 60, 13.5, fill=False, stroke=True)
+        p.setFont("Helvetica", 6.8)
+        p.drawString(35, y_r_m + 3, str(row['Asignatura / Área'])[:45])
+        p.drawString(240, y_r_m + 3, str(row['Promedio General']))
+        p.drawString(320, y_r_m + 3, str(row['Valoración Escuela Nueva']))
+        p.drawString(470, y_r_m + 3, str(row['Actividades Calificadas (C1-C10)']))
 
-        p.rect(40, y_r_m, width - 80, 14, fill=False, stroke=True)
-        p.setFont("Helvetica", 7)
-        p.drawString(45, y_r_m + 3, str(row['Asignatura / Área'])[:40])
-        p.drawString(250, y_r_m + 3, str(row['Promedio General']))
-        p.drawString(330, y_r_m + 3, str(row['Valoración Escuela Nueva']))
-        p.drawString(480, y_r_m + 3, str(row['Actividades Calificadas (C1-C10)']))
+    # ---------------------------------------------------------
+    # HOJA 2 EN ADELANTE: DESGLOSE DETALLADO POR GRUPO / GRADO
+    # ---------------------------------------------------------
+    p.showPage()
+    dibujar_encabezado(p, "DESGLOSE DETALLADO POR GRUPO Y NÓMINA DE ESTUDIANTES")
+
+    y_g = height - 85
+    p.setFont("Helvetica-Bold", 9)
+    p.setFillColor(colors.HexColor("#1B432C"))
+    p.drawString(30, y_g, "3. DESGLOSE DETALLADO POR GRUPO / GRADO Y NÓMINA")
+
+    for g_info in list_grados:
+        g_nombre = g_info['nombre']
+        est_grupo = [e for e in res_est_all if e.get("grado_id") == g_info['id']]
+        prom_g = g_info['promedio']
+        v_p_gr, _ = obtener_valoracion_cualitativa(prom_g)
+
+        if y_g < 140:
+            p.showPage()
+            dibujar_encabezado(p, "DESGLOSE DETALLADO POR GRUPO Y NÓMINA DE ESTUDIANTES")
+            y_g = height - 85
+
+        # TARJETA DEL GRADO
+        y_g -= 22
+        p.setFillColor(colors.HexColor("#E8F5E9"))
+        p.rect(30, y_g - 20, width - 60, 20, fill=True, stroke=True)
+        
+        p.setFillColor(colors.HexColor("#1B432C"))
+        p.setFont("Helvetica-Bold", 8)
+        p.drawString(35, y_g - 13, f"GRADO: {g_nombre.upper()}  |  Estudiantes: {len(est_grupo)}  |  Asistencias: {g_info['asistencias']}  |  Promedio: {prom_g:.2f} ({v_p_gr})")
+
+        y_g -= 20
+        # CABECERA TABLA ESTUDIANTES DEL GRADO
+        p.setFillColor(colors.HexColor("#008037"))
+        p.rect(30, y_g - 14, width - 60, 14, fill=True, stroke=True)
+        p.setFillColor(colors.white)
+        p.setFont("Helvetica-Bold", 6.8)
+        p.drawString(35, y_g - 10, "Estudiante")
+        p.drawString(250, y_g - 10, "Teléfono Acudiente")
+        p.drawString(380, y_g - 10, "Puntos Acumulados")
+        p.drawString(480, y_g - 10, "Total Asistencias")
+
+        y_g -= 14
+        p.setFillColor(colors.black)
+        p.setFont("Helvetica", 6.8)
+
+        if not est_grupo:
+            p.rect(30, y_g - 12, width - 60, 12, fill=False, stroke=True)
+            p.drawString(35, y_g - 9, "Sin estudiantes registrados en este curso.")
+            y_g -= 12
+        else:
+            for est in est_grupo:
+                if y_g < 60:
+                    p.showPage()
+                    dibujar_encabezado(p, "DESGLOSE DETALLADO POR GRUPO Y NÓMINA DE ESTUDIANTES")
+                    y_g = height - 85
+
+                p.rect(30, y_g - 12, width - 60, 12, fill=False, stroke=True)
+                p.drawString(35, y_g - 9, str(est.get('nombre', ''))[:40])
+                p.drawString(250, y_g - 9, str(est.get('telefono_acudiente') or 'Sin teléfono'))
+                p.drawString(380, y_g - 9, str(est.get('puntos', 0)))
+                p.drawString(480, y_g - 9, str(est.get('total_asistencias', 0)))
+                y_g -= 12
+
+        y_g -= 10
 
     p.showPage()
     p.save()
@@ -1329,6 +1386,7 @@ else:
                     val_pen_gr, _ = obtener_valoracion_cualitativa(prom_grupo)
 
                     list_grados_data.append({
+                        "id": g_id,
                         "nombre": g_nombre,
                         "alumnos": len(est_grupo),
                         "asistencias": len(reg_grupo),
@@ -1411,7 +1469,8 @@ else:
                         tot_obs=tot_observaciones,
                         prom_gen=promedio_general_notas,
                         list_grados=list_grados_data,
-                        df_mats=df_mats
+                        df_mats=df_mats,
+                        res_est_all=res_est_all
                     )
                     st.download_button(
                         label="📄 Descargar Informe Consolidado en PDF",
