@@ -2,7 +2,7 @@
 """
 SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA
 =======================================================================================
-- Pantalla de Carga Centrada (Escudo Institucional + Spinner Animado).
+- Carga Ultra Rápida Dinámica (Sin bloqueos de pantalla).
 - Evaluación Continua con Nombre y Fecha por Actividad (C1 - C10).
 - Generación de Boletines Oficiales en PDF (2 Páginas con Escudo y Bandera).
 - Adaptador Automático de Guías de Aprendizaje (PDF / Word / HTML a Escuela Nueva).
@@ -88,83 +88,14 @@ MESES_ESPANOL = [
     "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
 ]
 
-# ================================================================
-# PANTALLA DE CARGA OPCIÓN A (ESCUDO SIRAVITA CENTRADO + SPINNER)
-# ================================================================
-def mostrar_pantalla_carga_opcion_a():
-    img_b64 = ""
-    if os.path.exists("escudo_siravita.png"):
-        with open("escudo_siravita.png", "rb") as f:
-            img_b64 = base64.b64encode(f.read()).decode("utf-8")
-    
-    img_html = f'<img src="data:image/png;base64,{img_b64}" class="logo-siravita">' if img_b64 else '<div style="font-size: 80px;">🏫</div>'
-
-    st.markdown(
-        f"""
-        <style>
-        #splash-screen-a {{
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background-color: #ffffff;
-            z-index: 999999;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            font-family: 'Segoe UI', Roboto, sans-serif;
-            transition: opacity 0.6s ease-out;
-        }}
-        .logo-siravita {{
-            width: 130px;
-            height: auto;
-            margin-bottom: 15px;
-            filter: drop-shadow(0px 4px 8px rgba(0,0,0,0.15));
-            animation: pulse-logo 2s infinite ease-in-out;
-        }}
-        @keyframes pulse-logo {{
-            0% {{ transform: scale(1); }}
-            50% {{ transform: scale(1.05); }}
-            100% {{ transform: scale(1); }}
-        }}
-        .spinner-siravita {{
-            border: 5px solid #E8F5E9;
-            border-top: 5px solid #008037;
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            animation: spin 0.9s linear infinite;
-            margin-top: 20px;
-        }}
-        @keyframes spin {{
-            0% {{ transform: rotate(0deg); }}
-            100% {{ transform: rotate(360deg); }}
-        }}
-        </style>
-        <div id="splash-screen-a">
-            {img_html}
-            <h2 style="color: #008037; margin: 10px 0 2px 0; font-size: 26px; font-weight: bold;">C.E.R. SIRAVITA</h2>
-            <p style="color: #555555; font-size: 14px; margin: 0; font-weight: 500;">Cargando Asistente Educativo...</p>
-            <div class="spinner-siravita"></div>
-        </div>
-        <script>
-            window.addEventListener('load', function() {{
-                var splash = document.getElementById('splash-screen-a');
-                if (splash) {{
-                    setTimeout(function() {{
-                        splash.style.opacity = '0';
-                        setTimeout(function() {{ splash.style.display = 'none'; }}, 600);
-                    }}, 400);
-                }}
-            }});
-        </script>
-        """,
-        unsafe_allow_html=True
-    )
-
-mostrar_pantalla_carga_opcion_a()
+# Estilo para ajustar color institucional rápido de Streamlit
+st.markdown("""
+    <style>
+    .stSpinner > div {
+        border-top-color: #008037 !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 # ================================================================
 # CONEXIÓN CON SUPABASE
