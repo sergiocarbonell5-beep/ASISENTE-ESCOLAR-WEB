@@ -3,7 +3,7 @@
 SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA
 =======================================================================================
 - Módulo 0: Consolidado General e Informes Directivos (Asistencia + Notas Global y por Grado).
-- Módulo 1: Documentos Institucionales en Nube (Resiliente a Errores de Supabase/PostgREST).
+- Módulo 1: Documentos Institucionales en Nube (Sin bucles de recarga / Subida instantánea).
 - Módulo 2: Registro de Asistencia Oficial (PDF/Excel).
 - Módulo 3: Resumen Estadístico Mensual.
 - Módulo 4: Calificaciones Continuas (C1 - C10 con Nombre y Fecha).
@@ -112,6 +112,10 @@ supabase = init_supabase()
 
 if "profesor" not in st.session_state:
     st.session_state.profesor = None
+
+# Inicializar versión de uploader para evitar parpadeos
+if "upload_ver" not in st.session_state:
+    st.session_state.upload_ver = 0
 
 # ================================================================
 # LÓGICA DE ESCALA DE VALORACIÓN INSTITUCIONAL
@@ -1536,7 +1540,7 @@ else:
                     )
 
         # ================================================================
-        # 1. REPOSITORIO DE DOCUMENTOS INSTITUCIONALES (ROBUSTO Y SEGURO)
+        # 1. REPOSITORIO DE DOCUMENTOS INSTITUCIONALES (OPTIMIZADO SIN BUCLE)
         # ================================================================
         with t_docs:
             st.subheader("📁 Repositorio de Documentos Institucionales")
@@ -1547,10 +1551,10 @@ else:
             try:
                 res_docs_db = supabase.table("documentos").select("*").eq("profesor_id", prof["id"]).execute()
                 docs_existentes = res_docs_db.data or []
-            except Exception as err:
+            except Exception:
                 docs_existentes = []
 
-            # Mapeo universal flexible
+            # Mapeo universal de documentos existentes
             dict_docs_map = {}
             for d_item in docs_existentes:
                 t_doc = str(d_item.get("tipo_doc", ""))
@@ -1561,7 +1565,9 @@ else:
 
             st.markdown("---")
 
-            # MODO 1: PLANES DE ÁREA (UNA SOLA CASILLA GENERAL POR MATERIA)
+            v_key = st.session_state.upload_ver
+
+            # MODO 1: PLANES DE ÁREA (UNA CASILLA POR MATERIA)
             if tipo_doc_sel == "Planes de Área":
                 st.markdown(f"### 📑 Planes de Área Generales — {grado_sel_nombre}")
                 
@@ -1600,7 +1606,7 @@ else:
                             f_up = st.file_uploader(
                                 label=f"Subir Plan de Área {mat_nombre}",
                                 type=["pdf", "docx", "pptx", "xlsx", "txt"],
-                                key=f"up_pa_{m_idx}",
+                                key=f"up_pa_{m_idx}_v{v_key}",
                                 label_visibility="collapsed"
                             )
                             if f_up is not None:
@@ -1618,6 +1624,7 @@ else:
                                 
                                 try:
                                     supabase.table("documentos").insert(payload).execute()
+                                    st.session_state.upload_ver += 1
                                     st.toast(f"✅ ¡Plan de Área guardado para {mat_nombre}!")
                                     st.rerun()
                                 except Exception as ex_db:
@@ -1668,14 +1675,13 @@ else:
                                 f_up = st.file_uploader(
                                     label=f"Subir P{p_num}",
                                     type=["pdf", "docx", "pptx", "xlsx", "txt"],
-                                    key=f"up_et_{m_idx}_{p_num}",
+                                    key=f"up_et_{m_idx}_{p_num}_v{v_key}",
                                     label_visibility="collapsed"
                                 )
                                 if f_up is not None:
                                     bytes_data = f_up.getvalue()
                                     b64_str = base64.b64encode(bytes_data).decode('utf-8')
                                     
-                                    # Intentamos primero con la columna 'periodo'
                                     payload = {
                                         "nombre": f_up.name,
                                         "materia": mat_nombre,
@@ -1688,10 +1694,10 @@ else:
                                     
                                     try:
                                         supabase.table("documentos").insert(payload).execute()
+                                        st.session_state.upload_ver += 1
                                         st.toast(f"✅ ¡{f_up.name} guardado en Periodo {p_num}!")
                                         st.rerun()
                                     except Exception as ex_db1:
-                                        # Si la columna 'periodo' no existe en Supabase, guardamos sin ella
                                         try:
                                             payload_fallback = {
                                                 "nombre": f"{f_up.name} (P{p_num})",
@@ -1702,6 +1708,7 @@ else:
                                                 "profesor_id": prof["id"]
                                             }
                                             supabase.table("documentos").insert(payload_fallback).execute()
+                                            st.session_state.upload_ver += 1
                                             st.toast(f"✅ ¡{f_up.name} guardado exitosamente!")
                                             st.rerun()
                                         except Exception as ex_db2:
