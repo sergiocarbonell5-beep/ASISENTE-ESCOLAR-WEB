@@ -2,12 +2,12 @@
 """
 SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA
 =======================================================================================
-- Módulo 0: Consolidado General e Informes Directivos (PDF Multi-página y Excel).
+- Módulo 0: Consolidado General e Informes Directivos (Asistencia + Notas Global y por Grado).
 - Módulo 1: Documentos Institucionales en Nube.
 - Módulo 2: Registro de Asistencia Oficial (PDF/Excel).
 - Módulo 3: Resumen Estadístico Mensual.
 - Módulo 4: Calificaciones Continuas (C1 - C10 con Nombre y Fecha).
-- Módulo 5: Observador de Convivencia.
+- Módulo 5: Observador de Convivencia (Antes de Boletines Académicos).
 - Módulo 6: Boletines Académicos Oficiales (Escudo, Bandera, DANE y Decreto).
 - Módulo 7: Adaptador Automático de Guías a Escuela Nueva (4 Momentos).
 - Módulo 8: Tabla de Líderes y Gamificación.
@@ -283,9 +283,9 @@ def crear_link_whatsapp(telefono, nombre_estudiante, nombre_profesor):
     return f"https://wa.me/{num_limpio}?text={msg_encoded}"
 
 # ================================================================
-# GENERACIÓN DE PDF INFORME CONSOLIDADO GENERAL (COMPLETO MULTI-PÁGINA)
+# GENERACIÓN DE PDF INFORME CONSOLIDADO GENERAL (ASISTENCIA + NOTAS POR GRADO)
 # ================================================================
-def generar_pdf_consolidado_general(profesor_nombre, tot_est, tot_grados, tot_asist, tot_excusas, tot_obs, prom_gen, list_grados, df_mats, res_est_all):
+def generar_pdf_consolidado_general(profesor_nombre, tot_est, tot_grados, tot_asist, tot_excusas, tot_obs, prom_gen, list_grados, df_mats, res_est_all, res_calif_all):
     buffer = io.BytesIO()
     p = canvas.Canvas(buffer, pagesize=letter)
     width, height = letter
@@ -393,28 +393,31 @@ def generar_pdf_consolidado_general(profesor_nombre, tot_est, tot_grados, tot_as
         p.drawString(470, y_r_m + 3, str(row['Actividades Calificadas (C1-C10)']))
 
     # ---------------------------------------------------------
-    # HOJA 2 EN ADELANTE: DESGLOSE DETALLADO POR GRUPO / GRADO
+    # HOJA 2 EN ADELANTE: DESGLOSE DETALLADO POR GRUPO (ASISTENCIA + NOTAS POR MATERIA)
     # ---------------------------------------------------------
     p.showPage()
-    dibujar_encabezado(p, "DESGLOSE DETALLADO POR GRUPO Y NÓMINA DE ESTUDIANTES")
+    dibujar_encabezado(p, "DESGLOSE DETALLADO POR GRUPO: ASISTENCIA Y NOTAS POR MATERIA")
 
     y_g = height - 85
     p.setFont("Helvetica-Bold", 9)
     p.setFillColor(colors.HexColor("#1B432C"))
-    p.drawString(30, y_g, "3. DESGLOSE DETALLADO POR GRUPO / GRADO Y NÓMINA")
+    p.drawString(30, y_g, "3. DESGLOSE DETALLADO POR GRUPO / GRADO (ASISTENCIA Y CALIFICACIONES)")
+
+    df_calif_g = pd.DataFrame(res_calif_all) if res_calif_all else pd.DataFrame()
 
     for g_info in list_grados:
         g_nombre = g_info['nombre']
         est_grupo = [e for e in res_est_all if e.get("grado_id") == g_info['id']]
+        ids_est_grupo = [e["id"] for e in est_grupo]
         prom_g = g_info['promedio']
         v_p_gr, _ = obtener_valoracion_cualitativa(prom_g)
 
-        if y_g < 140:
+        if y_g < 220:
             p.showPage()
-            dibujar_encabezado(p, "DESGLOSE DETALLADO POR GRUPO Y NÓMINA DE ESTUDIANTES")
+            dibujar_encabezado(p, "DESGLOSE DETALLADO POR GRUPO: ASISTENCIA Y NOTAS POR MATERIA")
             y_g = height - 85
 
-        # TARJETA DEL GRADO
+        # TARJETA RESUMEN DEL GRADO
         y_g -= 22
         p.setFillColor(colors.HexColor("#E8F5E9"))
         p.rect(30, y_g - 20, width - 60, 20, fill=True, stroke=True)
@@ -423,40 +426,76 @@ def generar_pdf_consolidado_general(profesor_nombre, tot_est, tot_grados, tot_as
         p.setFont("Helvetica-Bold", 8)
         p.drawString(35, y_g - 13, f"GRADO: {g_nombre.upper()}  |  Estudiantes: {len(est_grupo)}  |  Asistencias: {g_info['asistencias']}  |  Promedio: {prom_g:.2f} ({v_p_gr})")
 
+        # TABLA DE NOTAS POR MATERIA DEL GRADO
         y_g -= 20
-        # CABECERA TABLA ESTUDIANTES DEL GRADO
         p.setFillColor(colors.HexColor("#008037"))
-        p.rect(30, y_g - 14, width - 60, 14, fill=True, stroke=True)
+        p.rect(30, y_g - 12, width - 60, 12, fill=True, stroke=True)
         p.setFillColor(colors.white)
-        p.setFont("Helvetica-Bold", 6.8)
-        p.drawString(35, y_g - 10, "Estudiante")
-        p.drawString(250, y_g - 10, "Teléfono Acudiente")
-        p.drawString(380, y_g - 10, "Puntos Acumulados")
-        p.drawString(480, y_g - 10, "Total Asistencias")
+        p.setFont("Helvetica-Bold", 6.5)
+        p.drawString(35, y_g - 9, f"Materia / Asignatura — {g_nombre}")
+        p.drawString(320, y_g - 9, "Promedio Grado")
+        p.drawString(450, y_g - 9, "Valoración Escuela Nueva")
 
-        y_g -= 14
+        y_g -= 12
         p.setFillColor(colors.black)
-        p.setFont("Helvetica", 6.8)
+        p.setFont("Helvetica", 6.5)
+
+        for m_nombre in MATERIAS_LISTA:
+            if y_g < 60:
+                p.showPage()
+                dibujar_encabezado(p, "DESGLOSE DETALLADO POR GRUPO: ASISTENCIA Y NOTAS POR MATERIA")
+                y_g = height - 85
+
+            key_m = normalizar_texto(m_nombre)
+            
+            if not df_calif_g.empty:
+                notas_g_mat = df_calif_g[(df_calif_g["estudiante_id"].isin(ids_est_grupo)) & (df_calif_g["materia"].apply(normalizar_texto) == key_m)]["nota"].tolist()
+            else:
+                notas_g_mat = []
+
+            prom_m_g = round(sum(notas_g_mat) / len(notas_g_mat), 2) if notas_g_mat else 0.0
+            val_p_mg, _ = obtener_valoracion_cualitativa(prom_m_g)
+
+            p.rect(30, y_g - 11, width - 60, 11, fill=False, stroke=True)
+            p.drawString(35, y_g - 8, str(m_nombre)[:50])
+            p.drawString(320, y_g - 8, f"{prom_m_g:.2f}" if prom_m_g > 0 else "Sin Notas")
+            p.drawString(450, y_g - 8, str(val_p_mg))
+            y_g -= 11
+
+        # NÓMINA DE ESTUDIANTES Y ASISTENCIA
+        y_g -= 12
+        p.setFillColor(colors.HexColor("#008037"))
+        p.rect(30, y_g - 12, width - 60, 12, fill=True, stroke=True)
+        p.setFillColor(colors.white)
+        p.setFont("Helvetica-Bold", 6.5)
+        p.drawString(35, y_g - 9, f"Estudiante — Nómina {g_nombre}")
+        p.drawString(250, y_g - 9, "Teléfono Acudiente")
+        p.drawString(380, y_g - 9, "Puntos Acumulados")
+        p.drawString(480, y_g - 9, "Total Asistencias")
+
+        y_g -= 12
+        p.setFillColor(colors.black)
+        p.setFont("Helvetica", 6.5)
 
         if not est_grupo:
-            p.rect(30, y_g - 12, width - 60, 12, fill=False, stroke=True)
-            p.drawString(35, y_g - 9, "Sin estudiantes registrados en este curso.")
-            y_g -= 12
+            p.rect(30, y_g - 11, width - 60, 11, fill=False, stroke=True)
+            p.drawString(35, y_g - 8, "Sin estudiantes registrados en este curso.")
+            y_g -= 11
         else:
             for est in est_grupo:
                 if y_g < 60:
                     p.showPage()
-                    dibujar_encabezado(p, "DESGLOSE DETALLADO POR GRUPO Y NÓMINA DE ESTUDIANTES")
+                    dibujar_encabezado(p, "DESGLOSE DETALLADO POR GRUPO: ASISTENCIA Y NOTAS POR MATERIA")
                     y_g = height - 85
 
-                p.rect(30, y_g - 12, width - 60, 12, fill=False, stroke=True)
-                p.drawString(35, y_g - 9, str(est.get('nombre', ''))[:40])
-                p.drawString(250, y_g - 9, str(est.get('telefono_acudiente') or 'Sin teléfono'))
-                p.drawString(380, y_g - 9, str(est.get('puntos', 0)))
-                p.drawString(480, y_g - 9, str(est.get('total_asistencias', 0)))
-                y_g -= 12
+                p.rect(30, y_g - 11, width - 60, 11, fill=False, stroke=True)
+                p.drawString(35, y_g - 8, str(est.get('nombre', ''))[:40])
+                p.drawString(250, y_g - 8, str(est.get('telefono_acudiente') or 'Sin teléfono'))
+                p.drawString(380, y_g - 8, str(est.get('puntos', 0)))
+                p.drawString(480, y_g - 8, str(est.get('total_asistencias', 0)))
+                y_g -= 11
 
-        y_g -= 10
+        y_g -= 15
 
     p.showPage()
     p.save()
@@ -1314,7 +1353,7 @@ else:
         # 0. CONSOLIDADO GENERAL E INFORMES DETALLADOS
         with t_consolidado:
             st.subheader("🌐 Consolidado General e Informe Directivo Institucional")
-            st.caption("Visión global, diagnósticos integrales y desgloses detallados por grado y por asignatura.")
+            st.caption("Visión global, diagnósticos integrales y desgloses detallados por grado (asistencia y materias).")
 
             try:
                 res_grados_all = supabase.table("grados").select("*").eq("profesor_id", prof["id"]).execute().data or []
@@ -1373,8 +1412,10 @@ else:
                 dict_grados = {g["id"]: g["nombre"] for g in res_grados_all}
                 list_grados_data = []
 
-                st.markdown("### 🏫 2. Desglose Detallado por Grupo / Grado")
+                st.markdown("### 🏫 2. Desglose Detallado por Grupo / Grado (Asistencia y Notas)")
                 
+                df_calif_global = pd.DataFrame(res_calif_all) if res_calif_all else pd.DataFrame()
+
                 for g_id, g_nombre in dict_grados.items():
                     est_grupo = [e for e in res_est_all if e.get("grado_id") == g_id]
                     reg_grupo = [r for r in res_reg_all if r.get("grado_id") == g_id]
@@ -1407,14 +1448,38 @@ else:
                             st.write(f"**📊 Promedio Académico:** {prom_grupo:.2f}")
                             st.write(f"**🏅 Valoración Institucional:** {val_pen_gr}")
 
+                        st.markdown("---")
+                        st.write(f"**📚 Rendimiento Académico por Materia en {g_nombre}:**")
+                        
+                        tabla_notas_materia_grado = []
+                        for m_nom in MATERIAS_LISTA:
+                            key_m = normalizar_texto(m_nom)
+                            if not df_calif_global.empty:
+                                notas_mg = df_calif_global[(df_calif_global["estudiante_id"].isin(ids_est_grupo)) & (df_calif_global["materia"].apply(normalizar_texto) == key_m)]["nota"].tolist()
+                            else:
+                                notas_mg = []
+                            prom_mg = round(sum(notas_mg) / len(notas_mg), 2) if notas_mg else 0.0
+                            val_p_mg, _ = obtener_valoracion_cualitativa(prom_mg)
+                            
+                            tabla_notas_materia_grado.append({
+                                "Asignatura / Área": m_nom,
+                                "Promedio Grado": f"{prom_mg:.2f}" if prom_mg > 0 else "Sin Notas",
+                                "Valoración Escuela Nueva": val_p_mg
+                            })
+                        
+                        df_mg = pd.DataFrame(tabla_notas_materia_grado)
+                        st.dataframe(df_mg, use_container_width=True)
+
+                        st.markdown("---")
+
                         if est_grupo:
-                            st.write("**Nómina de Estudiantes y Rendimiento:**")
+                            st.write(f"**👥 Nómina de Estudiantes y Asistencia — {g_nombre}:**")
                             df_est_g = pd.DataFrame([
                                 {
                                     "Estudiante": e["nombre"],
                                     "Teléfono Acudiente": e.get("telefono_acudiente") or "Sin teléfono",
                                     "Puntos": e.get("puntos", 0),
-                                    "Asistencias": e.get("total_asistencias", 0)
+                                    "Asistencias Totales": e.get("total_asistencias", 0)
                                 }
                                 for e in est_grupo
                             ])
@@ -1423,7 +1488,7 @@ else:
                 st.markdown("---")
 
                 # RECOPILACIÓN PARA TABLA POR MATERIAS
-                st.markdown("### 📚 3. Desglose Detallado por Materia / Asignatura")
+                st.markdown("### 📚 3. Desglose Detallado Global por Materia / Asignatura")
                 
                 df_calif = pd.DataFrame(res_calif_all) if res_calif_all else pd.DataFrame()
                 df_diarias = pd.DataFrame(res_notas_diarias_all) if res_notas_diarias_all else pd.DataFrame()
@@ -1470,7 +1535,8 @@ else:
                         prom_gen=promedio_general_notas,
                         list_grados=list_grados_data,
                         df_mats=df_mats,
-                        res_est_all=res_est_all
+                        res_est_all=res_est_all,
+                        res_calif_all=res_calif_all
                     )
                     st.download_button(
                         label="📄 Descargar Informe Consolidado en PDF",
