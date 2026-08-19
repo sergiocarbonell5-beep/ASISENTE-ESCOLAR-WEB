@@ -3,7 +3,7 @@
 SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA
 =======================================================================================
 - Módulo 0: Consolidado General e Informes Directivos (Asistencia + Notas Global y por Grado).
-- Módulo 1: Documentos Institucionales en Nube.
+- Módulo 1: Documentos Institucionales en Nube (Matriz por Materia y Periodo 1-4).
 - Módulo 2: Registro de Asistencia Oficial (PDF/Excel).
 - Módulo 3: Resumen Estadístico Mensual.
 - Módulo 4: Calificaciones Continuas (C1 - C10 con Nombre y Fecha).
@@ -91,7 +91,6 @@ MESES_ESPANOL = [
     "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
 ]
 
-# Estilo para ajustar color institucional rápido de Streamlit
 st.markdown("""
     <style>
     .stSpinner > div {
@@ -283,7 +282,7 @@ def crear_link_whatsapp(telefono, nombre_estudiante, nombre_profesor):
     return f"https://wa.me/{num_limpio}?text={msg_encoded}"
 
 # ================================================================
-# GENERACIÓN DE PDF INFORME CONSOLIDADO GENERAL (ASISTENCIA + NOTAS POR GRADO)
+# GENERACIÓN DE PDF INFORME CONSOLIDADO GENERAL
 # ================================================================
 def generar_pdf_consolidado_general(profesor_nombre, tot_est, tot_grados, tot_asist, tot_excusas, tot_obs, prom_gen, list_grados, df_mats, res_est_all, res_calif_all):
     buffer = io.BytesIO()
@@ -307,16 +306,12 @@ def generar_pdf_consolidado_general(profesor_nombre, tot_est, tot_grados, tot_as
         p_canvas.setLineWidth(1.5)
         p_canvas.line(30, y_hdr - 25, width - 30, y_hdr - 25)
 
-    # ---------------------------------------------------------
-    # HOJA 1: RESUMEN EJECUTIVO Y DIAGNÓSTICO GENERAL
-    # ---------------------------------------------------------
     dibujar_encabezado(p)
 
     p.setFont("Helvetica", 8)
     y_pos = height - 95
     p.drawString(30, y_pos, f"Docente Encargado: {profesor_nombre}   |   Fecha: {datetime.date.today().strftime('%d/%m/%Y')}   |   Año Lectivo: 2026")
 
-    # CUADRO DE MÉTRICAS GLOBALES
     y_m = y_pos - 50
     p.setFillColor(colors.HexColor("#F4F6F7"))
     p.rect(30, y_m, width - 60, 42, fill=True, stroke=True)
@@ -335,7 +330,6 @@ def generar_pdf_consolidado_general(profesor_nombre, tot_est, tot_grados, tot_as
     p.setFont("Helvetica-Oblique", 7.5)
     p.drawString(40, y_m + 10, f"Estado Institucional Global: {val_p_g} ({val_n_g})")
 
-    # SECCIÓN 1: DIAGNÓSTICO GENERAL DEL DESEMPEÑO EDUCATIVO
     y_diag = y_m - 25
     p.setFont("Helvetica-Bold", 9)
     p.setFillColor(colors.HexColor("#1B432C"))
@@ -362,7 +356,6 @@ def generar_pdf_consolidado_general(profesor_nombre, tot_est, tot_grados, tot_as
         p.drawString(40, y_l, lin)
         y_l -= 11
 
-    # SECCIÓN 2: RENDIMIENTO ACADÉMICO GLOBAL POR MATERIA
     y_mats = y_diag - 105
     p.setFont("Helvetica-Bold", 9)
     p.setFillColor(colors.HexColor("#1B432C"))
@@ -392,9 +385,6 @@ def generar_pdf_consolidado_general(profesor_nombre, tot_est, tot_grados, tot_as
         p.drawString(320, y_r_m + 3, str(row['Valoración Escuela Nueva']))
         p.drawString(470, y_r_m + 3, str(row['Actividades Calificadas (C1-C10)']))
 
-    # ---------------------------------------------------------
-    # HOJA 2 EN ADELANTE: DESGLOSE DETALLADO POR GRUPO (ASISTENCIA + NOTAS POR MATERIA)
-    # ---------------------------------------------------------
     p.showPage()
     dibujar_encabezado(p, "DESGLOSE DETALLADO POR GRUPO: ASISTENCIA Y NOTAS POR MATERIA")
 
@@ -417,7 +407,6 @@ def generar_pdf_consolidado_general(profesor_nombre, tot_est, tot_grados, tot_as
             dibujar_encabezado(p, "DESGLOSE DETALLADO POR GRUPO: ASISTENCIA Y NOTAS POR MATERIA")
             y_g = height - 85
 
-        # TARJETA RESUMEN DEL GRADO
         y_g -= 22
         p.setFillColor(colors.HexColor("#E8F5E9"))
         p.rect(30, y_g - 20, width - 60, 20, fill=True, stroke=True)
@@ -426,7 +415,6 @@ def generar_pdf_consolidado_general(profesor_nombre, tot_est, tot_grados, tot_as
         p.setFont("Helvetica-Bold", 8)
         p.drawString(35, y_g - 13, f"GRADO: {g_nombre.upper()}  |  Estudiantes: {len(est_grupo)}  |  Asistencias: {g_info['asistencias']}  |  Promedio: {prom_g:.2f} ({v_p_gr})")
 
-        # TABLA DE NOTAS POR MATERIA DEL GRADO
         y_g -= 20
         p.setFillColor(colors.HexColor("#008037"))
         p.rect(30, y_g - 12, width - 60, 12, fill=True, stroke=True)
@@ -447,13 +435,9 @@ def generar_pdf_consolidado_general(profesor_nombre, tot_est, tot_grados, tot_as
                 y_g = height - 85
 
             key_m = normalizar_texto(m_nombre)
-            
-            if not df_calif_g.empty:
-                notas_g_mat = df_calif_g[(df_calif_g["estudiante_id"].isin(ids_est_grupo)) & (df_calif_g["materia"].apply(normalizar_texto) == key_m)]["nota"].tolist()
-            else:
-                notas_g_mat = []
+            notas_mg = df_calif_g[(df_calif_g["estudiante_id"].isin(ids_est_grupo)) & (df_calif_g["materia"].apply(normalizar_texto) == key_m)]["nota"].tolist() if not df_calif_g.empty else []
 
-            prom_m_g = round(sum(notas_g_mat) / len(notas_g_mat), 2) if notas_g_mat else 0.0
+            prom_m_g = round(sum(notas_mg) / len(notas_mg), 2) if notas_mg else 0.0
             val_p_mg, _ = obtener_valoracion_cualitativa(prom_m_g)
 
             p.rect(30, y_g - 11, width - 60, 11, fill=False, stroke=True)
@@ -462,7 +446,6 @@ def generar_pdf_consolidado_general(profesor_nombre, tot_est, tot_grados, tot_as
             p.drawString(450, y_g - 8, str(val_p_mg))
             y_g -= 11
 
-        # NÓMINA DE ESTUDIANTES Y ASISTENCIA
         y_g -= 12
         p.setFillColor(colors.HexColor("#008037"))
         p.rect(30, y_g - 12, width - 60, 12, fill=True, stroke=True)
@@ -506,7 +489,6 @@ def generar_pdf_consolidado_general(profesor_nombre, tot_est, tot_grados, tot_as
 def generar_excel_consolidado_general(profesor_nombre, tot_est, tot_grados, tot_asist, tot_excusas, tot_obs, prom_gen, list_grados, df_mats):
     wb = openpyxl.Workbook()
     
-    # HOJA 1: RESUMEN GENERAL Y POR GRADOS
     ws1 = wb.active
     ws1.title = "Consolidado por Grados"
     ws1.views.sheetView[0].showGridLines = True
@@ -570,7 +552,6 @@ def generar_excel_consolidado_general(profesor_nombre, tot_est, tot_grados, tot_
     ws1.column_dimensions['D'].width = 25
     ws1.column_dimensions['E'].width = 20
 
-    # HOJA 2: CONSOLIDADO POR MATERIAS
     ws2 = wb.create_sheet(title="Consolidado por Materias")
     ws2.views.sheetView[0].showGridLines = True
 
@@ -608,12 +589,10 @@ def generar_pdf_boletin_oficial(estudiante_nombre, grado_nombre, periodo, sede_n
     p = canvas.Canvas(buffer, pagesize=letter)
     width, height = letter
 
-    # 1. ESCUDO C.E.R. SIRAVITA
     ruta_escudo = "escudo_siravita.png"
     if os.path.exists(ruta_escudo):
         p.drawImage(ruta_escudo, (width / 2.0) - 25, height - 62, width=50, height=50, mask='auto')
 
-    # 2. ENCABEZADO TEXTO OFICIAL
     p.setFillColor(colors.black)
     p.setFont("Helvetica-Bold", 8.5)
     y_hdr = height - 72
@@ -622,7 +601,6 @@ def generar_pdf_boletin_oficial(estudiante_nombre, grado_nombre, periodo, sede_n
     p.drawCentredString(width / 2.0, y_hdr - 20, "CENTRO EDUCATIVO RURAL SIRAVITA")
     p.drawCentredString(width / 2.0, y_hdr - 30, "MUNICIPIO DE ARBOLEDAS")
 
-    # 3. BLOQUE VERDE Y AMARILLO INSTITUCIONAL
     y_verde = y_hdr - 62
     p.setFillColor(colors.HexColor("#008037"))
     p.rect(30, y_verde, width - 60, 30, fill=True, stroke=False)
@@ -638,19 +616,16 @@ def generar_pdf_boletin_oficial(estudiante_nombre, grado_nombre, periodo, sede_n
     p.setFont("Helvetica-Bold", 6)
     p.drawCentredString(width / 2.0, y_verde + 3, "RESOLUCION DE APROBACION DE ESTUDIO 8: 008708-24-10-2024")
 
-    # 4. BANDERA DE COLOMBIA
     y_bandera = y_verde - 42
     ruta_bandera = "bandera_colombia.png"
     if os.path.exists(ruta_bandera):
         p.drawImage(ruta_bandera, (width / 2.0) - 25, y_bandera, width=50, height=38, mask='auto')
 
-    # 5. TÍTULO DEL BOLETÍN
     y_titulo = y_bandera - 16
     p.setFillColor(colors.black)
     p.setFont("Helvetica", 8.5)
     p.drawCentredString(width / 2.0, y_titulo, "Boletín Académico Escuela Nueva de Básica Primaria")
 
-    # 6. DATOS ENCABEZADO
     p.setFont("Helvetica", 8)
     y_d1 = y_titulo - 20
     p.drawString(40, y_d1, f"Sede: {sede_nombre.capitalize()}.........................................................")
@@ -664,7 +639,6 @@ def generar_pdf_boletin_oficial(estudiante_nombre, grado_nombre, periodo, sede_n
     y_d3 = y_d2 - 16
     p.drawString(40, y_d3, f"Docente: {profesor_nombre.title()}............................................................")
 
-    # 7. TABLA DE CALIFICACIONES
     y_tb_top = y_d3 - 18
     h_th = 28
     h_tr = 16.5
@@ -720,7 +694,6 @@ def generar_pdf_boletin_oficial(estudiante_nombre, grado_nombre, periodo, sede_n
         p.setFont("Helvetica-Oblique", 6.8)
         p.drawString(399, y_row + 4, val_nac)
 
-    # 8. OBSERVACIONES
     y_obs_sec = y_row - 22
     p.setFont("Helvetica-Bold", 8)
     p.drawString(60, y_obs_sec, "OBSERVACIONES:")
@@ -733,7 +706,6 @@ def generar_pdf_boletin_oficial(estudiante_nombre, grado_nombre, periodo, sede_n
 
     p.showPage()
 
-    # HOJA 2: ESCALA Y FIRMAS
     y_e = height - 120
     p.setFont("Helvetica-BoldOblique", 11)
     p.drawCentredString(width / 2.0, y_e + 20, "ESCALA DE VALORACION INSTITUCIONAL")
@@ -1487,7 +1459,6 @@ else:
 
                 st.markdown("---")
 
-                # RECOPILACIÓN PARA TABLA POR MATERIAS
                 st.markdown("### 📚 3. Desglose Detallado Global por Materia / Asignatura")
                 
                 df_calif = pd.DataFrame(res_calif_all) if res_calif_all else pd.DataFrame()
@@ -1520,7 +1491,6 @@ else:
 
                 st.markdown("---")
 
-                # BOTONES DE EXPORTACIÓN OFICIAL
                 st.markdown("### 📥 4. Exportar Informe Directivo Consolidado")
                 c_exp1, c_exp2 = st.columns(2)
 
@@ -1567,43 +1537,93 @@ else:
                         use_container_width=True
                     )
 
-        # 1. DOCUMENTOS INSTITUCIONALES
+        # ================================================================
+        # 1. REPOSITORIO DE DOCUMENTOS INSTITUCIONALES (NUEVA MATRIZ)
+        # ================================================================
         with t_docs:
-            st.subheader("📁 Repositorio de Documentos por Materia")
-            tipo_doc_sel = st.radio("Categoría:", ["Planes de Área", "Planes de Clase", "Guías Educativas"], horizontal=True)
-            materia_doc = st.selectbox("Materia:", MATERIAS_LISTA)
-            
-            archivo_subido = st.file_uploader(f"Subir documento a {tipo_doc_sel} ({materia_doc}):", type=["pdf", "docx", "pptx", "xlsx", "txt"])
-            if archivo_subido is not None:
-                if st.button("💾 Guardar Documento en la Nube"):
-                    bytes_data = archivo_subido.getvalue()
-                    b64_str = base64.b64encode(bytes_data).decode('utf-8')
-                    
-                    supabase.table("documentos").insert({
-                        "nombre": archivo_subido.name,
-                        "materia": materia_doc,
-                        "tipo_doc": tipo_doc_sel,
-                        "contenido_b64": b64_str,
-                        "grado_id": grado_sel_id,
-                        "profesor_id": prof["id"]
-                    }).execute()
-                    st.success("¡Documento guardado permanentemente en la nube!")
-                    st.rerun()
+            st.subheader("📁 Repositorio de Documentos Institucionales")
+            st.caption("Gestiona los Planes de Área y los Ejes Temáticos por materia y por periodo escolar (1 al 4).")
+
+            tipo_doc_sel = st.radio("Categoría de Documento:", ["Planes de Área", "Ejes Temáticos"], horizontal=True)
+
+            # Cargar todos los documentos del profesor y grado actual
+            try:
+                res_docs_db = supabase.table("documentos").select("*").eq("tipo_doc", tipo_doc_sel).eq("grado_id", grado_sel_id).eq("profesor_id", prof["id"]).execute()
+                docs_existentes = res_docs_db.data or []
+            except Exception:
+                docs_existentes = []
+
+            # Mapeo rápido de documentos existentes
+            dict_docs_map = {}
+            for d_item in docs_existentes:
+                mat_k = normalizar_texto(d_item.get("materia"))
+                per_k = d_item.get("periodo") or "1"
+                dict_docs_map[(mat_k, per_k)] = d_item
 
             st.markdown("---")
-            st.write(f"**Documentos de {materia_doc} en {tipo_doc_sel}:**")
-            res_docs = supabase.table("documentos").select("*").eq("materia", materia_doc).eq("tipo_doc", tipo_doc_sel).eq("grado_id", grado_sel_id).eq("profesor_id", prof["id"]).execute()
-            
-            if not res_docs.data:
-                st.info(f"Aún no se han subido documentos para {materia_doc}.")
-            else:
-                for doc in res_docs.data:
-                    c1, c2 = st.columns([3, 1])
-                    with c1:
-                        st.write(f"📄 **{doc['nombre']}** ({doc['created_at'][:10]})")
-                    with c2:
-                        bytes_dec = base64.b64decode(doc['contenido_b64'])
-                        st.download_button("⬇️ Descargar", data=bytes_dec, file_name=doc['nombre'], use_container_width=True)
+            st.markdown(f"### 📑 Matriz de **{tipo_doc_sel}** — {grado_sel_nombre}")
+
+            # ENCABEZADO DE TABLA MATRIZ
+            col_m_head, col_p1_h, col_p2_h, col_p3_h, col_p4_h = st.columns([2.5, 1.8, 1.8, 1.8, 1.8])
+            with col_m_head:
+                st.markdown("**Asignatura / Área**")
+            with col_p1_h:
+                st.markdown("**1️⃣ Primer Periodo**")
+            with col_p2_h:
+                st.markdown("**2️⃣ Segundo Periodo**")
+            with col_p3_h:
+                st.markdown("**3️⃣ Tercer Periodo**")
+            with col_p4_h:
+                st.markdown("**4️⃣ Cuarto Periodo**")
+
+            st.markdown("---")
+
+            # FILAS POR CADA MATERIA
+            for m_idx, mat_nombre in enumerate(MATERIAS_LISTA):
+                key_mat_norm = normalizar_texto(mat_nombre)
+                cols_p = st.columns([2.5, 1.8, 1.8, 1.8, 1.8])
+                
+                with cols_p[0]:
+                    st.write(f"**{m_idx + 1}. {mat_nombre}**")
+
+                for p_num, p_col in zip(["1", "2", "3", "4"], cols_p[1:]):
+                    with p_col:
+                        doc_guardado = dict_docs_map.get((key_mat_norm, p_num))
+                        
+                        if doc_guardado:
+                            st.success(f"📄 {doc_guardado['nombre'][:15]}...")
+                            bytes_dec = base64.b64decode(doc_guardado['contenido_b64'])
+                            st.download_button(
+                                label="⬇️ Descargar",
+                                data=bytes_dec,
+                                file_name=doc_guardado['nombre'],
+                                key=f"down_{m_idx}_{p_num}_{tipo_doc_sel}",
+                                use_container_width=True
+                            )
+                        else:
+                            f_up = st.file_uploader(
+                                label=f"Subir P{p_num}",
+                                type=["pdf", "docx", "pptx", "xlsx", "txt"],
+                                key=f"up_{m_idx}_{p_num}_{tipo_doc_sel}",
+                                label_visibility="collapsed"
+                            )
+                            if f_up is not None:
+                                bytes_data = f_up.getvalue()
+                                b64_str = base64.b64encode(bytes_data).decode('utf-8')
+                                
+                                supabase.table("documentos").insert({
+                                    "nombre": f_up.name,
+                                    "materia": mat_nombre,
+                                    "tipo_doc": tipo_doc_sel,
+                                    "periodo": p_num,
+                                    "contenido_b64": b64_str,
+                                    "grado_id": grado_sel_id,
+                                    "profesor_id": prof["id"]
+                                }).execute()
+                                st.toast(f"✅ ¡{f_up.name} guardado en Periodo {p_num}!")
+                                st.rerun()
+
+                st.divider()
 
         # 2. REGISTRO DE ASISTENCIA
         with t_asistencia:
@@ -1838,7 +1858,7 @@ else:
                 else:
                     st.caption("Ingresa calificaciones en la pestaña 'Calificaciones' para visualizar los promedios por materia.")
 
-        # 4. CALIFICACIONES CONTINUAS (CON NOMBRE Y FECHA DE ACTIVIDAD)
+        # 4. CALIFICACIONES CONTINUAS
         with t_notas:
             st.subheader(f"📝 Evaluación Continua — {grado_sel_nombre}")
             
