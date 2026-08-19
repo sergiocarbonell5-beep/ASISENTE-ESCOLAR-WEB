@@ -2,14 +2,14 @@
 """
 SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA
 =======================================================================================
-- Módulo 0: Consolidado General e Informes Directivos (Asistencia + Notas Global y por Grado).
-- Módulo 1: Documentos Institucionales en Nube (Plan Único vs Ejes P1-P4 sin errores de identación ni bucles).
+- Módulo 0: Consolidado General e Informes Directivos + Seguimiento Curricular de Ejes.
+- Módulo 1: Documentos Institucionales en Nube.
 - Módulo 2: Registro de Asistencia Oficial (PDF/Excel).
 - Módulo 3: Resumen Estadístico Mensual.
 - Módulo 4: Calificaciones Continuas (C1 - C10 con Nombre y Fecha).
-- Módulo 5: Observador de Convivencia (Antes de Boletines Académicos).
-- Módulo 6: Boletines Académicos Oficiales (Escudo, Bandera, DANE y Decreto).
-- Módulo 7: Adaptador Automático de Guías a Escuela Nueva (4 Momentos).
+- Módulo 5: Observador de Convivencia.
+- Módulo 6: Boletines Académicos Oficiales.
+- Módulo 7: Adaptador Automático de Guías a Escuela Nueva.
 - Módulo 8: Tabla de Líderes y Gamificación.
 """
 
@@ -50,7 +50,7 @@ st.set_page_config(
 
 APP_TITLE = "Asistente Educativo Sergio Carbonell"
 NOMBRE_ESCUELA = "C.E.R. Siravita"
-SEDE_DEFECTO = "Chicago Alto"
+SEDE_DEFECTO = "Chicagua Alto"
 
 PUNTOS_BASE = 10
 PUNTOS_EXTRA_PUNTUALIDAD = 5
@@ -78,6 +78,21 @@ MATERIAS_LISTA = [
     "Ética y valores humanos",
     "Educación religiosa"
 ]
+
+# BANCO PREDEFINIDO DE TEMAS SUGERIDOS POR MATERIA (MODIFICABLE EN TIEMPO REAL)
+TEMAS_PREDEFINIDOS = {
+    "Ciencias Naturales Educación ambiental": ["Los ecosistemas locales", "Cadena alimenticia y energía", "La célula y sus funciones", "Reinos de la naturaleza", "Cuidado del medio ambiente", "Materia y energía"],
+    "Ciencias Sociales, historia, geografía, constitución y democrática.": ["Geografía del municipio Arboledas", "Historia regional de Norte de Santander", "Símbolos patrios y democracia", "La constitución de 1991", "Población y economía rural", "Relieve e hidrografía"],
+    "Cátedra de la Paz": ["Resolución pacífica de conflictos", "Derechos Humanos", "Convivencia en el aula", "Valores ciudadanos", "Diálogo y mediación"],
+    "Educación Artística": ["Técnicas de dibujo y pintura", "Artesanías y modelado 3D", "Expresión corporal y teatro", "Música folclórica colombiana"],
+    "Educación Física, recreación y deportes": ["Patrones básicos de movimiento", "Juegos tradicionales y cooperativos", "Coordinación y agilidad", "Higiene y acondicionamiento físico"],
+    "Matemáticas": ["Operaciones básicas (Suma y Resta)", "Multiplicación y tablas", "División y reparto equitativo", "Fracciones y decimales", "Geometría plana y espacial", "Unidades de medida y patrones"],
+    "Humanidades lengua castellana": ["Comprensión lectora y cuentos", "Gramática: Sustantivos y verbos", "Ortografía y acentuación", "Producción de textos escritos", "El verbo y la oración", "Literatura oral y leyendas"],
+    "Idioma extranjero": ["Vocabulario básico y saludos", "Los números y colores", "La familia y objetos del salón", "Verbo To Be básico"],
+    "Tecnología e informática": ["Herramientas tecnológicas básicas", "Partes del computador", "Uso seguro de internet", "Robótica y lógica básica"],
+    "Ética y valores humanos": ["Autorespeto y autoestima", "Responsabilidad y compromiso", "Honestidad en la escuela", "Empatía y trabajo en equipo"],
+    "Educación religiosa": ["El respeto por la vida", "Valores comunitarios", "La familia como núcleo", "Tradiciones culturales y espirituales"]
+}
 
 DIMENSIONES_EVALUACION = [
     "🗣️ Participación y Preguntas en Clase",
@@ -284,9 +299,9 @@ def crear_link_whatsapp(telefono, nombre_estudiante, nombre_profesor):
     return f"https://wa.me/{num_limpio}?text={msg_encoded}"
 
 # ================================================================
-# GENERACIÓN DE PDF INFORME CONSOLIDADO GENERAL
+# GENERACIÓN DE PDF INFORME CONSOLIDADO GENERAL CON EJES
 # ================================================================
-def generar_pdf_consolidado_general(profesor_nombre, tot_est, tot_grados, tot_asist, tot_excusas, tot_obs, prom_gen, list_grados, df_mats, res_est_all, res_calif_all):
+def generar_pdf_consolidado_general(profesor_nombre, tot_est, tot_grados, tot_asist, tot_excusas, tot_obs, prom_gen, list_grados, df_mats, res_est_all, res_calif_all, periodo_ejes="Tercer Periodo", dict_ejes_progreso=None):
     buffer = io.BytesIO()
     p = canvas.Canvas(buffer, pagesize=letter)
     width, height = letter
@@ -371,9 +386,10 @@ def generar_pdf_consolidado_general(profesor_nombre, tot_est, tot_grados, tot_as
     p.setFillColor(colors.white)
     p.setFont("Helvetica-Bold", 7)
     p.drawString(35, y_mats - 11, "Asignatura / Área")
-    p.drawString(240, y_mats - 11, "Promedio")
-    p.drawString(320, y_mats - 11, "Valoración Escuela Nueva")
-    p.drawString(470, y_mats - 11, "Actividades (C1-C10)")
+    p.drawString(220, y_mats - 11, "Promedio")
+    p.drawString(290, y_mats - 11, "Valoración Escuela Nueva")
+    p.drawString(420, y_mats - 11, "Avance Ejes")
+    p.drawString(490, y_mats - 11, "Actividades")
 
     y_r_m = y_mats - h_th
     p.setFillColor(colors.black)
@@ -382,10 +398,58 @@ def generar_pdf_consolidado_general(profesor_nombre, tot_est, tot_grados, tot_as
         y_r_m -= 13.5
         p.rect(30, y_r_m, width - 60, 13.5, fill=False, stroke=True)
         p.setFont("Helvetica", 6.8)
-        p.drawString(35, y_r_m + 3, str(row['Asignatura / Área'])[:45])
-        p.drawString(240, y_r_m + 3, str(row['Promedio General']))
-        p.drawString(320, y_r_m + 3, str(row['Valoración Escuela Nueva']))
-        p.drawString(470, y_r_m + 3, str(row['Actividades Calificadas (C1-C10)']))
+        p.drawString(35, y_r_m + 3, str(row['Asignatura / Área'])[:40])
+        p.drawString(220, y_r_m + 3, str(row['Promedio General']))
+        p.drawString(290, y_r_m + 3, str(row['Valoración Escuela Nueva']))
+        p.drawString(420, y_r_m + 3, str(row.get('% Avance Curricular', '0%')))
+        p.drawString(490, y_r_m + 3, str(row['Actividades Calificadas (C1-C10)']))
+
+    # SECCIÓN 3: AVANCE Y COBERURA CURRICULAR DE EJES TEMÁTICOS
+    p.showPage()
+    dibujar_encabezado(p, f"SEGUIMIENTO DE EJES TEMÁTICOS Y COBERTURA CURRICULAR — {periodo_ejes.upper()}")
+
+    y_ejes = height - 85
+    p.setFont("Helvetica-Bold", 9.5)
+    p.setFillColor(colors.HexColor("#1B432C"))
+    p.drawString(30, y_ejes, f"3. SEGUIMIENTO DE COBERTURA Y AVANCE DE EJES TEMÁTICOS ({periodo_ejes.upper()})")
+
+    p.setFont("Helvetica", 7.5)
+    p.setFillColor(colors.black)
+    p.drawString(30, y_ejes - 12, "Estado del desarrollo curricular por asignatura según los temas seleccionados en el plan de área:")
+
+    y_ejes_tbl = y_ejes - 28
+
+    if dict_ejes_progreso:
+        for mat_nom, info_e in dict_ejes_progreso.items():
+            if y_ejes_tbl < 120:
+                p.showPage()
+                dibujar_encabezado(p, f"SEGUIMIENTO DE EJES TEMÁTICOS Y COBERTURA CURRICULAR — {periodo_ejes.upper()}")
+                y_ejes_tbl = height - 85
+
+            vistos = info_e["vistos"]
+            total = info_e["total"]
+            pct = info_e["pct"]
+            temas_v_list = info_e["temas_vistos"]
+            
+            p.setFillColor(colors.HexColor("#E8F5E9"))
+            p.rect(30, y_ejes_tbl - 16, width - 60, 16, fill=True, stroke=True)
+            p.setFillColor(colors.HexColor("#1B432C"))
+            p.setFont("Helvetica-Bold", 7.5)
+            p.drawString(35, y_ejes_tbl - 12, f"📘 {mat_nom.upper()}")
+            p.drawRightString(width - 35, y_ejes_tbl - 12, f"Avance Curricular: {pct:.1f}% ({vistos}/{total} temas vistos)")
+
+            y_ejes_tbl -= 16
+            p.setFillColor(colors.white)
+            p.rect(30, y_ejes_tbl - 22, width - 60, 22, fill=True, stroke=True)
+            p.setFillColor(colors.black)
+            p.setFont("Helvetica", 6.8)
+            
+            txt_vistos = ", ".join(temas_v_list) if temas_v_list else "Ningún tema marcado como visto aún."
+            p.drawString(35, y_ejes_tbl - 10, f"• Temas Desarrollados: {txt_vistos[:110]}")
+            if len(txt_vistos) > 110:
+                p.drawString(42, y_ejes_tbl - 18, f"{txt_vistos[110:220]}")
+            
+            y_ejes_tbl -= 28
 
     p.showPage()
     dibujar_encabezado(p, "DESGLOSE DETALLADO POR GRUPO: ASISTENCIA Y NOTAS POR MATERIA")
@@ -393,7 +457,7 @@ def generar_pdf_consolidado_general(profesor_nombre, tot_est, tot_grados, tot_as
     y_g = height - 85
     p.setFont("Helvetica-Bold", 9)
     p.setFillColor(colors.HexColor("#1B432C"))
-    p.drawString(30, y_g, "3. DESGLOSE DETALLADO POR GRUPO / GRADO (ASISTENCIA Y CALIFICACIONES)")
+    p.drawString(30, y_g, "4. DESGLOSE DETALLADO POR GRUPO / GRADO (ASISTENCIA Y CALIFICACIONES)")
 
     df_calif_g = pd.DataFrame(res_calif_all) if res_calif_all else pd.DataFrame()
 
@@ -487,7 +551,7 @@ def generar_pdf_consolidado_general(profesor_nombre, tot_est, tot_grados, tot_as
     buffer.seek(0)
     return buffer
 
-# GENERACIÓN DE EXCEL CONSOLIDADO GENERAL
+# GENERACIÓN DE EXCEL CON CONSOLIDADO Y AVANCE DE EJES
 def generar_excel_consolidado_general(profesor_nombre, tot_est, tot_grados, tot_asist, tot_excusas, tot_obs, prom_gen, list_grados, df_mats):
     wb = openpyxl.Workbook()
     
@@ -554,10 +618,10 @@ def generar_excel_consolidado_general(profesor_nombre, tot_est, tot_grados, tot_
     ws1.column_dimensions['D'].width = 25
     ws1.column_dimensions['E'].width = 20
 
-    ws2 = wb.create_sheet(title="Consolidado por Materias")
+    ws2 = wb.create_sheet(title="Consolidado por Materias y Ejes")
     ws2.views.sheetView[0].showGridLines = True
 
-    headers_m = ["Asignatura / Área", "Promedio General", "Valoración Escuela Nueva", "Escala Nacional", "Actividades Calificadas (C1-C10)", "Documentos en Nube"]
+    headers_m = ["Asignatura / Área", "Promedio General", "Valoración Escuela Nueva", "% Avance Curricular Ejes", "Actividades Calificadas (C1-C10)", "Documentos en Nube"]
     for c_i, h_txt in enumerate(headers_m, start=1):
         cell = ws2.cell(row=1, column=c_i, value=h_txt)
         cell.font = font_bold_white
@@ -568,7 +632,7 @@ def generar_excel_consolidado_general(profesor_nombre, tot_est, tot_grados, tot_
         ws2.cell(row=r_m, column=1, value=row['Asignatura / Área'])
         ws2.cell(row=r_m, column=2, value=row['Promedio General'])
         ws2.cell(row=r_m, column=3, value=row['Valoración Escuela Nueva'])
-        ws2.cell(row=r_m, column=4, value=row['Escala Nacional'])
+        ws2.cell(row=r_m, column=4, value=row.get('% Avance Curricular', '0%'))
         ws2.cell(row=r_m, column=5, value=row['Actividades Calificadas (C1-C10)'])
         ws2.cell(row=r_m, column=6, value=row['Documentos en Nube'])
         r_m += 1
@@ -576,7 +640,7 @@ def generar_excel_consolidado_general(profesor_nombre, tot_est, tot_grados, tot_
     ws2.column_dimensions['A'].width = 45
     ws2.column_dimensions['B'].width = 18
     ws2.column_dimensions['C'].width = 28
-    ws2.column_dimensions['D'].width = 18
+    ws2.column_dimensions['D'].width = 25
     ws2.column_dimensions['E'].width = 30
     ws2.column_dimensions['F'].width = 22
 
@@ -1324,10 +1388,10 @@ else:
             "🏆 Tabla de Líderes"
         ])
 
-        # 0. CONSOLIDADO GENERAL E INFORMES DETALLADOS
+        # 0. CONSOLIDADO GENERAL E INFORMES DETALLADOS + SEGUIMIENTO DE EJES
         with t_consolidado:
             st.subheader("🌐 Consolidado General e Informe Directivo Institucional")
-            st.caption("Visión global, diagnósticos integrales y desgloses detallados por grado (asistencia y materias).")
+            st.caption("Visión global, diagnósticos integrales, desgloses por grado y avance curricular de ejes temáticos.")
 
             try:
                 res_grados_all = supabase.table("grados").select("*").eq("profesor_id", prof["id"]).execute().data or []
@@ -1460,8 +1524,50 @@ else:
 
                 st.markdown("---")
 
-                st.markdown("### 📚 3. Desglose Detallado Global por Materia / Asignatura")
-                
+                # ================================================================
+                # NUEVO SELECTOR Y CÁLCULO DE AVANCE DE EJES TEMÁTICOS
+                # ================================================================
+                st.markdown("### 📚 3. Desglose Detallado Global por Materia y Avance Curricular")
+                st.caption("Selecciona el periodo académico y marca los temas vistos para calcular automáticamente el % de avance que irá adjunto al informe:")
+
+                c_p_sel, _ = st.columns([2, 3])
+                with c_p_sel:
+                    periodo_ejes_sel = st.selectbox("📌 Selecciona Periodo para Marcar Temas Vistos:", ["Primer Periodo", "Segundo Periodo", "Tercer Periodo", "Cuarto Periodo"], index=2)
+
+                dict_ejes_progreso = {}
+
+                with st.expander(f"🎯 Seleccionar Temas Vistos de los Ejes Temáticos ({periodo_ejes_sel})", expanded=True):
+                    cols_ejes = st.columns(2)
+                    for idx_m, mat in enumerate(MATERIAS_LISTA):
+                        temas_sugeridos = TEMAS_PREDEFINIDOS.get(mat, ["Tema 1", "Tema 2", "Tema 3", "Tema 4", "Tema 5", "Tema 6"])
+                        col_u = cols_ejes[idx_m % 2]
+                        with col_u:
+                            st.markdown(f"**{idx_m + 1}. {mat}**")
+                            
+                            # Selección interactiva de temas vistos
+                            vistos_sel = st.multiselect(
+                                label=f"Temas Vistos ({mat}):",
+                                options=temas_sugeridos,
+                                default=temas_sugeridos[:2] if idx_m < 3 else [],
+                                key=f"eje_sel_{idx_m}_{periodo_ejes_sel}",
+                                label_visibility="collapsed"
+                            )
+                            
+                            total_t = len(temas_sugeridos)
+                            vistos_t = len(vistos_sel)
+                            pct_avance = round((vistos_t / total_t) * 100, 1) if total_t > 0 else 0.0
+
+                            st.caption(f"📊 Avance: **{pct_avance}%** ({vistos_t} de {total_t} temas vistos)")
+                            
+                            dict_ejes_progreso[mat] = {
+                                "vistos": vistos_t,
+                                "total": total_t,
+                                "pct": pct_avance,
+                                "temas_vistos": vistos_sel
+                            }
+                            st.markdown("---")
+
+                # CONSTRUCCIÓN DE LA TABLA GLOBAL
                 df_calif = pd.DataFrame(res_calif_all) if res_calif_all else pd.DataFrame()
                 df_diarias = pd.DataFrame(res_notas_diarias_all) if res_notas_diarias_all else pd.DataFrame()
 
@@ -1477,12 +1583,14 @@ else:
                     cant_actividades = len(actividades_mat[actividades_mat["nota"] > 0]) if not actividades_mat.empty else 0
 
                     docs_mat = [d for d in res_docs_all if normalizar_texto(d.get("materia")) == key_n]
+                    info_prog = dict_ejes_progreso.get(mat, {"pct": 0.0})
 
                     mats_resumen.append({
                         "Asignatura / Área": mat,
                         "Promedio General": f"{prom_m:.2f}" if prom_m > 0 else "Sin Notas",
                         "Valoración Escuela Nueva": v_pen,
                         "Escala Nacional": v_nac,
+                        "% Avance Curricular": f"{info_prog['pct']}%",
                         "Actividades Calificadas (C1-C10)": cant_actividades,
                         "Documentos en Nube": len(docs_mat)
                     })
@@ -1493,6 +1601,8 @@ else:
                 st.markdown("---")
 
                 st.markdown("### 📥 4. Exportar Informe Directivo Consolidado")
+                st.caption("Los informes generados a continuación incluyen la métrica global de rendimiento y el desglose de avance por ejes temáticos seleccionados:")
+                
                 c_exp1, c_exp2 = st.columns(2)
 
                 with c_exp1:
@@ -1507,10 +1617,12 @@ else:
                         list_grados=list_grados_data,
                         df_mats=df_mats,
                         res_est_all=res_est_all,
-                        res_calif_all=res_calif_all
+                        res_calif_all=res_calif_all,
+                        periodo_ejes=periodo_ejes_sel,
+                        dict_ejes_progreso=dict_ejes_progreso
                     )
                     st.download_button(
-                        label="📄 Descargar Informe Consolidado en PDF",
+                        label="📄 Descargar Informe Consolidado en PDF (Con Ejes Temáticos)",
                         data=pdf_c_bytes,
                         file_name=f"Informe_Consolidado_General_{prof['nombre'].replace(' ', '_')}_2026.pdf",
                         mime="application/pdf",
@@ -1538,9 +1650,7 @@ else:
                         use_container_width=True
                     )
 
-        # ================================================================
-        # 1. REPOSITORIO DE DOCUMENTOS INSTITUCIONALES (SOLUCIÓN DEFINITIVA)
-        # ================================================================
+        # 1. REPOSITORIO DE DOCUMENTOS INSTITUCIONALES
         with t_docs:
             st.subheader("📁 Repositorio de Documentos Institucionales")
             st.caption("Gestiona el Plan de Área general o los Ejes Temáticos por periodo escolar.")
@@ -1553,7 +1663,6 @@ else:
             except Exception as err_db:
                 docs_existentes = []
 
-            # Mapeo robusto multi-filtro
             dict_planes_map = {}
             dict_ejes_map = {}
 
@@ -1562,7 +1671,6 @@ else:
                 t_doc = str(d_item.get("tipo_doc", ""))
                 per_val = str(d_item.get("periodo") or "")
 
-                # Extraer periodo si está guardado dentro del tipo_doc (ej: "Ejes Temáticos P3")
                 if not per_val or per_val == "None":
                     match_p = re.search(r'P([1-4])', t_doc)
                     if match_p:
@@ -1576,7 +1684,6 @@ else:
             st.markdown("---")
             v_key = st.session_state.upload_ver
 
-            # MODO 1: PLANES DE ÁREA (UNA CASILLA POR MATERIA)
             if tipo_doc_sel == "Planes de Área":
                 st.markdown(f"### 📑 Planes de Área Generales — {grado_sel_nombre}")
                 
@@ -1641,7 +1748,6 @@ else:
 
                     st.divider()
 
-            # MODO 2: EJES TEMÁTICOS (4 COLUMNAS DE PERIODOS)
             else:
                 st.markdown(f"### 📑 Matriz de Ejes Temáticos — {grado_sel_nombre}")
 
@@ -1691,7 +1797,6 @@ else:
                                     bytes_data = f_up.getvalue()
                                     b64_str = base64.b64encode(bytes_data).decode('utf-8')
                                     
-                                    # Formato de doble respaldo
                                     payload = {
                                         "nombre": f_up.name,
                                         "materia": mat_nombre,
