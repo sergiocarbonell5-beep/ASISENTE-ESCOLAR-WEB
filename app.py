@@ -3,7 +3,7 @@
 SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA
 =======================================================================================
 - Módulo 0: Consolidado General e Informes Directivos (Asistencia + Notas Global y por Grado).
-- Módulo 1: Documentos Institucionales en Nube (Plan de Área Único vs Ejes Temáticos P1-P4).
+- Módulo 1: Documentos Institucionales en Nube (Resiliente a Errores de Supabase/PostgREST).
 - Módulo 2: Registro de Asistencia Oficial (PDF/Excel).
 - Módulo 3: Resumen Estadístico Mensual.
 - Módulo 4: Calificaciones Continuas (C1 - C10 con Nombre y Fecha).
@@ -130,7 +130,7 @@ def obtener_valoracion_cualitativa(nota):
 
 def normalizar_texto(txt):
     if not txt: return ""
-    return re.sub(r'[^a-zA-Z0-9]', '', txt.lower())
+    return re.sub(r'[^a-zA-Z0-9]', '', str(txt).lower())
 
 # ================================================================
 # AUTENTICACIÓN
@@ -216,7 +216,6 @@ def registrar_dia_no_lectivo(fecha_str, motivo, grado_id, profesor_id):
     except Exception:
         return False
 
-# REGISTRO Y MODIFICACIÓN DE ASISTENCIA
 def registrar_asistencia_manual(estudiante, fecha_str, grado_id, profesor_id):
     hora_str = datetime.datetime.now().strftime("%H:%M:%S")
     
@@ -1380,7 +1379,6 @@ else:
 
                 st.markdown("---")
 
-                # RECOPILACIÓN PARA TABLA POR GRADOS
                 dict_grados = {g["id"]: g["nombre"] for g in res_grados_all}
                 list_grados_data = []
 
@@ -1538,7 +1536,7 @@ else:
                     )
 
         # ================================================================
-        # 1. REPOSITORIO DE DOCUMENTOS INSTITUCIONALES (AJUSTADO)
+        # 1. REPOSITORIO DE DOCUMENTOS INSTITUCIONALES (ROBUSTO Y SEGURO)
         # ================================================================
         with t_docs:
             st.subheader("📁 Repositorio de Documentos Institucionales")
@@ -1547,17 +1545,19 @@ else:
             tipo_doc_sel = st.radio("Categoría de Documento:", ["Planes de Área", "Ejes Temáticos"], horizontal=True)
 
             try:
-                res_docs_db = supabase.table("documentos").select("*").eq("tipo_doc", tipo_doc_sel).eq("grado_id", grado_sel_id).eq("profesor_id", prof["id"]).execute()
+                res_docs_db = supabase.table("documentos").select("*").eq("profesor_id", prof["id"]).execute()
                 docs_existentes = res_docs_db.data or []
-            except Exception:
+            except Exception as err:
                 docs_existentes = []
 
-            # Mapeo rápido de documentos en base de datos
+            # Mapeo universal flexible
             dict_docs_map = {}
             for d_item in docs_existentes:
-                mat_k = normalizar_texto(d_item.get("materia"))
-                per_k = str(d_item.get("periodo") or "General")
-                dict_docs_map[(mat_k, per_k)] = d_item
+                t_doc = str(d_item.get("tipo_doc", ""))
+                if t_doc == tipo_doc_sel or (tipo_doc_sel == "Ejes Temáticos" and "Ejes" in t_doc):
+                    mat_k = normalizar_texto(d_item.get("materia"))
+                    per_k = str(d_item.get("periodo") or "General")
+                    dict_docs_map[(mat_k, per_k)] = d_item
 
             st.markdown("---")
 
@@ -1607,17 +1607,21 @@ else:
                                 bytes_data = f_up.getvalue()
                                 b64_str = base64.b64encode(bytes_data).decode('utf-8')
                                 
-                                supabase.table("documentos").insert({
+                                payload = {
                                     "nombre": f_up.name,
                                     "materia": mat_nombre,
                                     "tipo_doc": "Planes de Área",
-                                    "periodo": "General",
                                     "contenido_b64": b64_str,
                                     "grado_id": grado_sel_id,
                                     "profesor_id": prof["id"]
-                                }).execute()
-                                st.toast(f"✅ ¡Plan de Área guardado para {mat_nombre}!")
-                                st.rerun()
+                                }
+                                
+                                try:
+                                    supabase.table("documentos").insert(payload).execute()
+                                    st.toast(f"✅ ¡Plan de Área guardado para {mat_nombre}!")
+                                    st.rerun()
+                                except Exception as ex_db:
+                                    st.error(f"Error al subir el archivo: {ex_db}")
 
                     st.divider()
 
@@ -1671,7 +1675,8 @@ else:
                                     bytes_data = f_up.getvalue()
                                     b64_str = base64.b64encode(bytes_data).decode('utf-8')
                                     
-                                    supabase.table("documentos").insert({
+                                    # Intentamos primero con la columna 'periodo'
+                                    payload = {
                                         "nombre": f_up.name,
                                         "materia": mat_nombre,
                                         "tipo_doc": "Ejes Temáticos",
@@ -1679,9 +1684,28 @@ else:
                                         "contenido_b64": b64_str,
                                         "grado_id": grado_sel_id,
                                         "profesor_id": prof["id"]
-                                    }).execute()
-                                    st.toast(f"✅ ¡{f_up.name} guardado en Periodo {p_num}!")
-                                    st.rerun()
+                                    }
+                                    
+                                    try:
+                                        supabase.table("documentos").insert(payload).execute()
+                                        st.toast(f"✅ ¡{f_up.name} guardado en Periodo {p_num}!")
+                                        st.rerun()
+                                    except Exception as ex_db1:
+                                        # Si la columna 'periodo' no existe en Supabase, guardamos sin ella
+                                        try:
+                                            payload_fallback = {
+                                                "nombre": f"{f_up.name} (P{p_num})",
+                                                "materia": mat_nombre,
+                                                "tipo_doc": f"Ejes Temáticos P{p_num}",
+                                                "contenido_b64": b64_str,
+                                                "grado_id": grado_sel_id,
+                                                "profesor_id": prof["id"]
+                                            }
+                                            supabase.table("documentos").insert(payload_fallback).execute()
+                                            st.toast(f"✅ ¡{f_up.name} guardado exitosamente!")
+                                            st.rerun()
+                                        except Exception as ex_db2:
+                                            st.error(f"Error al guardar en base de datos: {ex_db2}")
 
                     st.divider()
 
