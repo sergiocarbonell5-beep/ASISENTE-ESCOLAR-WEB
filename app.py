@@ -3,7 +3,7 @@
 SISTEMA INTEGRAL EDUCATIVO — C.E.R. SIRAVITA
 =======================================================================================
 - Módulo 0: Consolidado General e Informes Directivos (Asistencia + Notas Global y por Grado).
-- Módulo 1: Documentos Institucionales en Nube (Matriz por Materia y Periodo 1-4).
+- Módulo 1: Documentos Institucionales en Nube (Plan de Área Único vs Ejes Temáticos P1-P4).
 - Módulo 2: Registro de Asistencia Oficial (PDF/Excel).
 - Módulo 3: Resumen Estadístico Mensual.
 - Módulo 4: Calificaciones Continuas (C1 - C10 con Nombre y Fecha).
@@ -1538,73 +1538,69 @@ else:
                     )
 
         # ================================================================
-        # 1. REPOSITORIO DE DOCUMENTOS INSTITUCIONALES (NUEVA MATRIZ)
+        # 1. REPOSITORIO DE DOCUMENTOS INSTITUCIONALES (AJUSTADO)
         # ================================================================
         with t_docs:
             st.subheader("📁 Repositorio de Documentos Institucionales")
-            st.caption("Gestiona los Planes de Área y los Ejes Temáticos por materia y por periodo escolar (1 al 4).")
+            st.caption("Gestiona el Plan de Área general o los Ejes Temáticos por periodo escolar.")
 
             tipo_doc_sel = st.radio("Categoría de Documento:", ["Planes de Área", "Ejes Temáticos"], horizontal=True)
 
-            # Cargar todos los documentos del profesor y grado actual
             try:
                 res_docs_db = supabase.table("documentos").select("*").eq("tipo_doc", tipo_doc_sel).eq("grado_id", grado_sel_id).eq("profesor_id", prof["id"]).execute()
                 docs_existentes = res_docs_db.data or []
             except Exception:
                 docs_existentes = []
 
-            # Mapeo rápido de documentos existentes
+            # Mapeo rápido de documentos en base de datos
             dict_docs_map = {}
             for d_item in docs_existentes:
                 mat_k = normalizar_texto(d_item.get("materia"))
-                per_k = d_item.get("periodo") or "1"
+                per_k = str(d_item.get("periodo") or "General")
                 dict_docs_map[(mat_k, per_k)] = d_item
 
             st.markdown("---")
-            st.markdown(f"### 📑 Matriz de **{tipo_doc_sel}** — {grado_sel_nombre}")
 
-            # ENCABEZADO DE TABLA MATRIZ
-            col_m_head, col_p1_h, col_p2_h, col_p3_h, col_p4_h = st.columns([2.5, 1.8, 1.8, 1.8, 1.8])
-            with col_m_head:
-                st.markdown("**Asignatura / Área**")
-            with col_p1_h:
-                st.markdown("**1️⃣ Primer Periodo**")
-            with col_p2_h:
-                st.markdown("**2️⃣ Segundo Periodo**")
-            with col_p3_h:
-                st.markdown("**3️⃣ Tercer Periodo**")
-            with col_p4_h:
-                st.markdown("**4️⃣ Cuarto Periodo**")
-
-            st.markdown("---")
-
-            # FILAS POR CADA MATERIA
-            for m_idx, mat_nombre in enumerate(MATERIAS_LISTA):
-                key_mat_norm = normalizar_texto(mat_nombre)
-                cols_p = st.columns([2.5, 1.8, 1.8, 1.8, 1.8])
+            # MODO 1: PLANES DE ÁREA (UNA SOLA CASILLA GENERAL POR MATERIA)
+            if tipo_doc_sel == "Planes de Área":
+                st.markdown(f"### 📑 Planes de Área Generales — {grado_sel_nombre}")
                 
-                with cols_p[0]:
-                    st.write(f"**{m_idx + 1}. {mat_nombre}**")
+                col_m_head, col_doc_h = st.columns([2.5, 5])
+                with col_m_head:
+                    st.markdown("**Asignatura / Área**")
+                with col_doc_h:
+                    st.markdown("**Documento Plan de Área (Anual / Consolidado)**")
 
-                for p_num, p_col in zip(["1", "2", "3", "4"], cols_p[1:]):
-                    with p_col:
-                        doc_guardado = dict_docs_map.get((key_mat_norm, p_num))
+                st.markdown("---")
+
+                for m_idx, mat_nombre in enumerate(MATERIAS_LISTA):
+                    key_mat_norm = normalizar_texto(mat_nombre)
+                    c_m, c_d = st.columns([2.5, 5])
+                    
+                    with c_m:
+                        st.write(f"**{m_idx + 1}. {mat_nombre}**")
+                    
+                    with c_d:
+                        doc_guardado = dict_docs_map.get((key_mat_norm, "General"))
                         
                         if doc_guardado:
-                            st.success(f"📄 {doc_guardado['nombre'][:15]}...")
-                            bytes_dec = base64.b64decode(doc_guardado['contenido_b64'])
-                            st.download_button(
-                                label="⬇️ Descargar",
-                                data=bytes_dec,
-                                file_name=doc_guardado['nombre'],
-                                key=f"down_{m_idx}_{p_num}_{tipo_doc_sel}",
-                                use_container_width=True
-                            )
+                            col_info, col_btn = st.columns([3, 2])
+                            with col_info:
+                                st.success(f"📄 **{doc_guardado['nombre']}**")
+                            with col_btn:
+                                bytes_dec = base64.b64decode(doc_guardado['contenido_b64'])
+                                st.download_button(
+                                    label="⬇️ Descargar Plan de Área",
+                                    data=bytes_dec,
+                                    file_name=doc_guardado['nombre'],
+                                    key=f"down_pa_{m_idx}",
+                                    use_container_width=True
+                                )
                         else:
                             f_up = st.file_uploader(
-                                label=f"Subir P{p_num}",
+                                label=f"Subir Plan de Área {mat_nombre}",
                                 type=["pdf", "docx", "pptx", "xlsx", "txt"],
-                                key=f"up_{m_idx}_{p_num}_{tipo_doc_sel}",
+                                key=f"up_pa_{m_idx}",
                                 label_visibility="collapsed"
                             )
                             if f_up is not None:
@@ -1614,16 +1610,80 @@ else:
                                 supabase.table("documentos").insert({
                                     "nombre": f_up.name,
                                     "materia": mat_nombre,
-                                    "tipo_doc": tipo_doc_sel,
-                                    "periodo": p_num,
+                                    "tipo_doc": "Planes de Área",
+                                    "periodo": "General",
                                     "contenido_b64": b64_str,
                                     "grado_id": grado_sel_id,
                                     "profesor_id": prof["id"]
                                 }).execute()
-                                st.toast(f"✅ ¡{f_up.name} guardado en Periodo {p_num}!")
+                                st.toast(f"✅ ¡Plan de Área guardado para {mat_nombre}!")
                                 st.rerun()
 
-                st.divider()
+                    st.divider()
+
+            # MODO 2: EJES TEMÁTICOS (4 COLUMNAS DE PERIODOS)
+            else:
+                st.markdown(f"### 📑 Matriz de Ejes Temáticos — {grado_sel_nombre}")
+
+                col_m_head, col_p1_h, col_p2_h, col_p3_h, col_p4_h = st.columns([2.5, 1.8, 1.8, 1.8, 1.8])
+                with col_m_head:
+                    st.markdown("**Asignatura / Área**")
+                with col_p1_h:
+                    st.markdown("**1️⃣ Primer Periodo**")
+                with col_p2_h:
+                    st.markdown("**2️⃣ Segundo Periodo**")
+                with col_p3_h:
+                    st.markdown("**3️⃣ Tercer Periodo**")
+                with col_p4_h:
+                    st.markdown("**4️⃣ Cuarto Periodo**")
+
+                st.markdown("---")
+
+                for m_idx, mat_nombre in enumerate(MATERIAS_LISTA):
+                    key_mat_norm = normalizar_texto(mat_nombre)
+                    cols_p = st.columns([2.5, 1.8, 1.8, 1.8, 1.8])
+                    
+                    with cols_p[0]:
+                        st.write(f"**{m_idx + 1}. {mat_nombre}**")
+
+                    for p_num, p_col in zip(["1", "2", "3", "4"], cols_p[1:]):
+                        with p_col:
+                            doc_guardado = dict_docs_map.get((key_mat_norm, p_num))
+                            
+                            if doc_guardado:
+                                st.success(f"📄 {doc_guardado['nombre'][:14]}...")
+                                bytes_dec = base64.b64decode(doc_guardado['contenido_b64'])
+                                st.download_button(
+                                    label="⬇️ Descargar",
+                                    data=bytes_dec,
+                                    file_name=doc_guardado['nombre'],
+                                    key=f"down_et_{m_idx}_{p_num}",
+                                    use_container_width=True
+                                )
+                            else:
+                                f_up = st.file_uploader(
+                                    label=f"Subir P{p_num}",
+                                    type=["pdf", "docx", "pptx", "xlsx", "txt"],
+                                    key=f"up_et_{m_idx}_{p_num}",
+                                    label_visibility="collapsed"
+                                )
+                                if f_up is not None:
+                                    bytes_data = f_up.getvalue()
+                                    b64_str = base64.b64encode(bytes_data).decode('utf-8')
+                                    
+                                    supabase.table("documentos").insert({
+                                        "nombre": f_up.name,
+                                        "materia": mat_nombre,
+                                        "tipo_doc": "Ejes Temáticos",
+                                        "periodo": p_num,
+                                        "contenido_b64": b64_str,
+                                        "grado_id": grado_sel_id,
+                                        "profesor_id": prof["id"]
+                                    }).execute()
+                                    st.toast(f"✅ ¡{f_up.name} guardado en Periodo {p_num}!")
+                                    st.rerun()
+
+                    st.divider()
 
         # 2. REGISTRO DE ASISTENCIA
         with t_asistencia:
